@@ -1,0 +1,6 @@
+<div>
+    {% url 'index' as index_url %}
+    <span>{% if request.path == index_url %}Home{% else %}<a href="{{ index_url }}">Home</a>{% endif %}</span>
+    {% url 'directory:directory' as directory_url %}
+    <span>{% if request.path == directory_url %}Directory{% else %}<a href="{{ directory_url }}">Directory</a>{% endif %}</span>
+</div>
