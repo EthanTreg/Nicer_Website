@@ -1,3 +1,17 @@
-(% extends 'base.html' %}
+{% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Directory{% endblock %}
+
+{% block content %}
+<h1>Directories</h1>
+<ul>
+    {% for directory in directories %}
+    <li>
+        <a href="{% url 'directory:files' directory.name %}">
+            {{ directory.name }}
+        </a>
+    </li>
+    {% endfor %}
+</ul>
+{% endblock %}
