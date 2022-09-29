@@ -7,13 +7,13 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('directory', '0001_initial'),
+        ('file_mgr', '0001_initial'),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='directory',
+            model_name='Directory',
             name='parent_id',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='directories', to='directory.directory'),
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='directories', to='file_mgr.directory'),
         ),
     ]

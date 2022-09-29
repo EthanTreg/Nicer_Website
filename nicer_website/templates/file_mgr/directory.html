@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block title %}Directory{% endblock %}
+
+{% block content %}
+<h1>{{ current_dir }} Directory</h1>
+
+{% if parent_path == '' %}
+    {% url 'file_mgr:index' as parent_url %}
+{% else %}
+    {% url 'file_mgr:directory' parent_path as parent_url %}
+{% endif %}
+<a href="{{ parent_url }}">
+    Parent Directory
+</a>
+
+<h2>Directories</h2>
+<ul>
+    {% for dir in dirs %}
+        {% url 'file_mgr:directory' dir.path|add:'/'|add:dir.name as dir_url %}
+        <li>
+            <a href="{{ dir_url }}">{{ dir.name }}</a>
+        </li>
+    {% endfor %}
+</ul>
+
+<h2>Files</h2>
+<ul>
+    {% for file in files %}
+        {% url 'file_mgr:file' file.path|add:'/'|add:file.name as file_url %}
+        <li>
+            <a href="{{ file_url }}">{{ file.name }}</a>
+        </li>
+    {% endfor %}
+</ul>
+{% endblock %}

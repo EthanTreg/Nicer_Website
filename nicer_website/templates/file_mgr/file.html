@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Directory{% endblock %}
+
+{% block content %}
+{% if parent_path == '' or parent_path == None %}
+    <h1>{{ file.name }}</h1>
+    {% url 'file_mgr:index' as parent_url %}
+{% else %}
+    <h1>{{ file.path }}/{{ file.name }}</h1>
+    {% url 'file_mgr:directory' parent_path as parent_url %}
+{% endif %}
+<a href="{{ parent_url }}">
+    Parent Directory
+</a>
+
+<div>
+    {% with file.path|add:'/'|add:file.name as file_path %}
+        <image src="{% static 'file_mgr'|add:'/'|add:file_path %}" />
+    {% endwith %}
+</div>
+{% endblock %}

@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.CharField(max_length=64, unique=True)),
-                ('parent_id', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='directories', to='directory.directory')),
+                ('parent_id', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='directories', to='file_mgr.directory')),
             ],
         ),
         migrations.CreateModel(
@@ -25,7 +25,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.CharField(max_length=64, unique=True)),
-                ('parent_id', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='files', to='directory.directory')),
+                ('parent_id', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='files', to='file_mgr.directory')),
             ],
         ),
     ]
