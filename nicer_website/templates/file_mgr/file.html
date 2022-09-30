@@ -17,7 +17,7 @@
 
 <div>
     {% with file.path|add:'/'|add:file.name as file_path %}
-        <image src="{% static 'file_mgr'|add:'/'|add:file_path %}" />
+        <image src="{% static 'file_mgr'|add:'/'|add:file_path %}" alt="No Image" onError="this.onerror=null; this.remove()"/>
     {% endwith %}
 </div>
 {% endblock %}

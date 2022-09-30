@@ -3,34 +3,46 @@
 {% block title %}Directory{% endblock %}
 
 {% block content %}
-<h1>{{ current_dir }} Directory</h1>
+<h1>Directory: {{ current_dir }}</h1>
 
-{% if parent_path == '' %}
-    {% url 'file_mgr:index' as parent_url %}
-{% else %}
-    {% url 'file_mgr:directory' parent_path as parent_url %}
-{% endif %}
-<a href="{{ parent_url }}">
-    Parent Directory
-</a>
+<div>
+    {% if parent_path == '' %}
+        {% url 'file_mgr:index' as parent_url %}
+    {% else %}
+        {% url 'file_mgr:directory' parent_path as parent_url %}
+    {% endif %}
+    <a href="{{ parent_url }}">
+        Parent Directory
+    </a>
+</div>
 
-<h2>Directories</h2>
-<ul>
-    {% for dir in dirs %}
-        {% url 'file_mgr:directory' dir.path|add:'/'|add:dir.name as dir_url %}
-        <li>
-            <a href="{{ dir_url }}">{{ dir.name }}</a>
-        </li>
-    {% endfor %}
-</ul>
+<div>
+    {% if dirs|length > 0 %}
+        <h2>Directories</h2>
+        <ul>
+            {% for dir in dirs %}
+                {% url 'file_mgr:directory' dir.path|add:'/'|add:dir.name as dir_url %}
+                <li>
+                    <a href="{{ dir_url }}">{{ dir.name }}</a>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
 
-<h2>Files</h2>
-<ul>
-    {% for file in files %}
-        {% url 'file_mgr:file' file.path|add:'/'|add:file.name as file_url %}
-        <li>
-            <a href="{{ file_url }}">{{ file.name }}</a>
-        </li>
-    {% endfor %}
-</ul>
+    {% if files|length > 0 %}
+        <h2>Files</h2>
+        <ul>
+            {% for file in files %}
+                {% url 'file_mgr:file' file.path|add:'/'|add:file.name as file_url %}
+                <li>
+                    <a href="{{ file_url }}">{{ file.name }}</a>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if dirs|length == 0 and files|length == 0 %}
+        Empty Directory
+    {% endif %}
+</div>
 {% endblock %}

@@ -4,8 +4,8 @@ from .models import Item
 
 
 def dir_file_fetcher(items):
-    dirs = items.filter(type=Item.item_type[0][0])
-    files = items.filter(type=Item.item_type[1][0])
+    dirs = items.filter(type=Item.item_type[0][0]).order_by('name')
+    files = items.filter(type=Item.item_type[1][0]).order_by('name')
 
     return dirs, files
 
@@ -41,7 +41,6 @@ def directory(request: HttpRequest, path) -> HttpResponse:
 def file(request: HttpRequest, path) -> HttpResponse:
     parent_path = '/'.join(path.split('/')[:-1])
     file_name = path.split('/')[-1]
-    print(parent_path)
 
     if not parent_path:
         parent_path = Item._meta.get_field('path').get_default()
