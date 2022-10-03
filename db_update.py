@@ -1,5 +1,6 @@
-import sqlite3
 import os
+import json
+import sqlite3
 
 
 def progress_bar(i: int, total: int):
@@ -33,7 +34,8 @@ def table_insert(cursor, connection, data):
 
 
 def main():
-    data_dir = '../../Documents/Nicer_Data/ethan/'
+    with open('config.txt', mode='r', encoding='utf8') as config:
+        data_dir = json.load(config)['data_dir'] + '/'
 
     total = sum(len(files) + len(dirs) for _, dirs, files in os.walk(data_dir))
     count = 0

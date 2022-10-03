@@ -1,6 +1,14 @@
 {% extends 'base.html' %}
 {% load static %}
 
+{% block head %}
+<style>
+    .responsive {
+        max-width: 100%;
+		max-height: 90vh;
+</style>
+{% endblock %}
+
 {% block title %}Directory{% endblock %}
 
 {% block content %}
@@ -17,7 +25,10 @@
 
 <div>
     {% with file.path|add:'/'|add:file.name as file_path %}
-        <image src="{% static 'file_mgr'|add:'/'|add:file_path %}" alt="No Image" onError="this.onerror=null; this.remove()"/>
+        <image alt="No Image"
+		        class="responsive"
+		        onError="this.onerror=null; this.remove()"
+		        src="{% static 'nicer_data'|add:'/'|add:file_path %}" />
     {% endwith %}
 </div>
 {% endblock %}

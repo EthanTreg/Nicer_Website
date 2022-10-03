@@ -1,0 +1,3 @@
+{
+    "data_dir": "../../Documents/Nicer_Data/ethan"
+}

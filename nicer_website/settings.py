@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.1/ref/settings/
 """
 
 import os
+import json
 from pathlib import Path
 from decouple import config
 
@@ -119,9 +120,13 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
 
+with open('config.txt', mode='r', encoding='utf8') as f:
+    data_dir = json.load(f)['data_dir']
+
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'nicer_website/static'),
+    ('nicer_data', data_dir)
 ]
 
 # Default primary key field type
