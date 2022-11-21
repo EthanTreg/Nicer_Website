@@ -23,3 +23,5 @@ class Item(models.Model):
 
     def __str__(self):
         return str(self.name)
+
+# create index file_mgr_item_path_idx on file_mgr_item (path)

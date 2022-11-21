@@ -4,3 +4,6 @@ from django.shortcuts import render
 
 def index(request: HttpRequest) -> HttpResponse:
     return render(request, 'index.html')
+
+def file_request(request: HttpRequest):
+    print('\nTEST\n')

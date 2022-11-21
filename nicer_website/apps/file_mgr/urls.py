@@ -7,4 +7,5 @@ urlpatterns = [
     path('dir', views.index, name='index'),
     path('dir/<path:path>', views.directory, name='directory'),
     path('file/<path:path>', views.file, name='file'),
+    path('file_request', views.file_request, name='file_request'),
 ]

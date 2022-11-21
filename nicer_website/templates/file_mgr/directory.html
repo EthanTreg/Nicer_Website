@@ -2,47 +2,109 @@
 
 {% block title %}Directory{% endblock %}
 
+{% block head %}
+	<style>
+		.column {
+			float: left;
+			width: 50%;
+		}
+
+		.row::after {
+			clear: both;
+		}
+
+		@media screen and (max-width: 600px) {
+			.column {
+				width: 100%;
+			}
+		}
+	</style>
+
+	<script>
+		const quantity = 20;
+		let end = 0;
+		
+		function height() {
+			var body = document.body;
+			var html = document.documentElement;
+			return Math.max(body.scrollHeight, body.offsetHeight, html.clientHeight, html.scrollHeight, html.offsetHeight);
+		};
+
+		function add_item(item) {
+			const list_item = document.createElement('li');
+			const item_element = document.createElement('a');
+			const item_text = document.createTextNode(item.name);
+			const path_category = item.type == 'file' ? `{% url 'file_mgr:file' 'TEMP' %}` : `{% url 'file_mgr:directory' 'TEMP' %}`;
+			const relative_path = item.path ? `${item.path}${item.name}` : item.name;
+
+			item_element.href = path_category.replace('TEMP', relative_path)
+			item_element.appendChild(item_text);
+			list_item.appendChild(item_element);
+
+			document.querySelector(`#${item.type}`).append(list_item);
+		};
+				
+		function load() {
+			const start = end;
+			var items_added = true;
+			end += quantity;
+			
+			fetch(`/manager/file_request?start=${start}&end=${end}&path={{current_dir}}`)
+			.then(response => response.json())
+			.then(data => {
+				data.dirs.forEach(add_item);
+				data.files.forEach(add_item);
+
+				items_added = Math.max(data.dirs.length, data.files.length) == 0 ? false : true;
+			}).then(_ => {
+				if (window.innerHeight == height() && items_added) {
+					load();
+				}
+			})
+		};
+
+		document.addEventListener('DOMContentLoaded', load);
+		
+		window.onscroll = () => {
+			if (window.innerHeight + window.scrollY >= height() - 1) {
+				load();
+			}
+		}
+	</script>
+{% endblock %}
+
 {% block content %}
-<h1>Directory: {{ current_dir }}</h1>
+	<h1>Directory: {{ current_dir }}</h1>
 
-<div>
-    {% if parent_path == '' %}
-        {% url 'file_mgr:index' as parent_url %}
-    {% else %}
-        {% url 'file_mgr:directory' parent_path as parent_url %}
-    {% endif %}
-    <a href="{{ parent_url }}">
-        Parent Directory
-    </a>
-</div>
+	<div>
+		{% if parent_path == '' %}
+			{% url 'file_mgr:index' as parent_url %}
+		{% else %}
+			{% url 'file_mgr:directory' parent_path as parent_url %}
+		{% endif %}
+		<a href="{{ parent_url }}">
+			Parent Directory
+		</a>
+	</div>
 
-<div>
-    {% if dirs|length > 0 %}
-        <h2>Directories</h2>
-        <ul>
-            {% for dir in dirs %}
-                {% url 'file_mgr:directory' dir.path|add:'/'|add:dir.name as dir_url %}
-                <li>
-                    <a href="{{ dir_url }}">{{ dir.name }}</a>
-                </li>
-            {% endfor %}
-        </ul>
-    {% endif %}
+	<div class="row">
+		{% if dirs|length > 0 %}
+			<div class="column">
+				<h2>Directories</h2>
+				<ul id="dir"/>
+			</div>
+		{% endif %}
+		{% if files|length > 0 %}
+			<div class="column">
+				<h2>Files</h2>
+				<ul id="file" />
+			</div>
+		{% endif %}
+	</div>
 
-    {% if files|length > 0 %}
-        <h2>Files</h2>
-        <ul>
-            {% for file in files %}
-                {% url 'file_mgr:file' file.path|add:'/'|add:file.name as file_url %}
-                <li>
-                    <a href="{{ file_url }}">{{ file.name }}</a>
-                </li>
-            {% endfor %}
-        </ul>
-    {% endif %}
-
-    {% if dirs|length == 0 and files|length == 0 %}
-        Empty Directory
-    {% endif %}
-</div>
+	<div>
+		{% if dirs|length == 0 and files|length == 0 %}
+			Empty Directory
+		{% endif %}
+	</div>
 {% endblock %}

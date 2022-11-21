@@ -5,3 +5,4 @@
 /.git/
 /nicer_website/static/
 /data/
+**/__pycache__
