@@ -3,108 +3,123 @@
 {% block title %}Directory{% endblock %}
 
 {% block head %}
-	<style>
+<style>
+	.column {
+		float: left;
+		width: 50%;
+	}
+
+	.row::after {
+		clear: both;
+	}
+
+	@media screen and (max-width: 600px) {
 		.column {
-			float: left;
-			width: 50%;
+			width: 100%;
 		}
+	}
+</style>
 
-		.row::after {
-			clear: both;
-		}
+<script>
+	const QUANTITY = 20;
+	var end = 0;
+	
+	function height() {
+		var body = document.body;
+		var html = document.documentElement;
+		return Math.max(body.scrollHeight, body.offsetHeight, html.clientHeight, html.scrollHeight, html.offsetHeight);
+	};
 
-		@media screen and (max-width: 600px) {
-			.column {
-				width: 100%;
-			}
-		}
-	</style>
+	function addItem(item) {
+		const LIST_Element = document.createElement('li');
+		const ITEM_ELEMENT = document.createElement('a');
+		const ITEM_TEXT = document.createTextNode(item.name);
+		const PATH_CATEGORY = item.type == 'file' ? `{% url 'file_mgr:file' 'TEMP' %}` : `{% url 'file_mgr:directory' 'TEMP' %}`;
+		const RELATIVE_PATH = item.path ? `${item.path}${item.name}` : item.name;
 
-	<script>
-		const quantity = 20;
-		let end = 0;
-		
-		function height() {
-			var body = document.body;
-			var html = document.documentElement;
-			return Math.max(body.scrollHeight, body.offsetHeight, html.clientHeight, html.scrollHeight, html.offsetHeight);
-		};
+		ITEM_ELEMENT.href = PATH_CATEGORY.replace('TEMP', RELATIVE_PATH)
+		ITEM_ELEMENT.appendChild(ITEM_TEXT);
+		LIST_Element.appendChild(ITEM_ELEMENT);
 
-		function add_item(item) {
-			const list_item = document.createElement('li');
-			const item_element = document.createElement('a');
-			const item_text = document.createTextNode(item.name);
-			const path_category = item.type == 'file' ? `{% url 'file_mgr:file' 'TEMP' %}` : `{% url 'file_mgr:directory' 'TEMP' %}`;
-			const relative_path = item.path ? `${item.path}${item.name}` : item.name;
-
-			item_element.href = path_category.replace('TEMP', relative_path)
-			item_element.appendChild(item_text);
-			list_item.appendChild(item_element);
-
-			document.querySelector(`#${item.type}`).append(list_item);
-		};
-				
-		function load() {
-			const start = end;
-			var items_added = true;
-			end += quantity;
+		document.querySelector(`#${item.type}`).append(LIST_Element);
+	};
 			
-			fetch(`/manager/file_request?start=${start}&end=${end}&path={{current_dir}}`)
-			.then(response => response.json())
-			.then(data => {
-				data.dirs.forEach(add_item);
-				data.files.forEach(add_item);
-
-				items_added = Math.max(data.dirs.length, data.files.length) == 0 ? false : true;
-			}).then(_ => {
-				if (window.innerHeight == height() && items_added) {
-					load();
-				}
-			})
-		};
-
-		document.addEventListener('DOMContentLoaded', load);
+	function loadData() {
+		const START = end;
+		var items_added = true;
+		end += QUANTITY;
 		
-		window.onscroll = () => {
-			if (window.innerHeight + window.scrollY >= height() - 1) {
-				load();
+		fetch(`/manager/file_request?start=${START}&end=${end}&path={{ current_dir }}`)
+		.then(response => response.json())
+		.then(data => {
+			data.dirs.forEach(addItem);
+			data.files.forEach(addItem);
+
+			items_added = Math.max(data.dirs.length, data.files.length) == 0 ? false : true;
+		})
+		.then(_ => {
+			if (window.innerHeight == height() && items_added) {
+				loadData();
 			}
+		})
+	};
+
+	function currentDir() {
+		const HEADING_ELEMENT = document.createElement('h1');
+		let headingText = document.createTextNode('{{ current_dir }}');
+		console.log('{{ current_dir }}');
+
+		if ('{{ current_dir }}' == '/') {
+			headingText = document.createTextNode('Root');
+			console.log('test');
 		}
-	</script>
+		console.log(headingText);
+
+		HEADING_ELEMENT.appendChild(headingText);
+		document.querySelector(`#current_dir`).append(HEADING_ELEMENT);
+	};
+
+	document.addEventListener('DOMContentLoaded', () => {
+		currentDir();
+		loadData();
+	});
+	
+	window.onscroll = () => {
+		if (window.innerHeight + window.scrollY >= height() - 1) {
+			loadData();
+		}
+	};
+</script>
 {% endblock %}
 
 {% block content %}
-	<h1>Directory: {{ current_dir }}</h1>
+<div id="current_dir"></div>
 
-	<div>
-		{% if parent_path == '' %}
-			{% url 'file_mgr:index' as parent_url %}
-		{% else %}
-			{% url 'file_mgr:directory' parent_path as parent_url %}
-		{% endif %}
-		<a href="{{ parent_url }}">
-			Parent Directory
-		</a>
-	</div>
+<div>
+	{% url 'file_mgr:directory' parent_path as parent_url %}
+	<a href="{{ parent_url }}">
+		Parent Directory
+	</a>
+</div>
 
-	<div class="row">
-		{% if dirs|length > 0 %}
-			<div class="column">
-				<h2>Directories</h2>
-				<ul id="dir"/>
-			</div>
-		{% endif %}
-		{% if files|length > 0 %}
-			<div class="column">
-				<h2>Files</h2>
-				<ul id="file" />
-			</div>
-		{% endif %}
-	</div>
+<div class="row">
+	{% if dirs_exist %}
+		<div class="column">
+			<h2>Directories</h2>
+			<ul id="dir"></ul>
+		</div>
+	{% endif %}
+	{% if files_exist %}
+		<div class="column">
+			<h2>Files</h2>
+			<ul id="file"></ul>
+		</div>
+	{% endif %}
+</div>
 
-	<div>
-		{% if dirs|length == 0 and files|length == 0 %}
-			Empty Directory
-		{% endif %}
-	</div>
+<div>
+	{% if not dirs_exist and not files_exist %}
+		Empty Directory
+	{% endif %}
+</div>
 {% endblock %}

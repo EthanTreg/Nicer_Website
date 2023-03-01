@@ -6,6 +6,8 @@
     .responsive {
         max-width: 100%;
 		max-height: 90vh;
+        margin: auto;
+        display: block;
 	}
 </style>
 {% endblock %}
@@ -13,25 +15,20 @@
 {% block title %}Directory{% endblock %}
 
 {% block content %}
-{% if parent_path == '' or parent_path == None %}
-    <h1>{{ file.name }}</h1>
-    {% url 'file_mgr:index' as parent_url %}
-{% else %}
-    <h1>{{ file.path }}{{ file.name }}</h1>
-    {% url 'file_mgr:directory' parent_path as parent_url %}
-{% endif %}
+<h1>{{ file.path }}{{ file.name }}</h1>
+
+{% url 'file_mgr:directory' parent_path as parent_url %}
 <a href="{{ parent_url }}">
     Parent Directory
 </a>
 
 <div>
-    {% comment %}
-    {% with file.path|add:'/'|add:file.name as file_path %}
-        <image alt="No Image"
-		        class="responsive"
-		        onError="this.onerror=null; this.remove()"
-		        src="{% static 'nicer_data'|add:file_path %}" />
+    {% with file.path|add:file.name as file_path %}
+        <image alt="No Image" 
+            class="responsive"
+            onError="this.onerror=null; this.remove()"
+            src="{% static 'nicer_data/'|add:file_path %}"
+        />
     {% endwith %}
-    {% endcomment %}
 </div>
 {% endblock %}

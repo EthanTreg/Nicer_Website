@@ -1,6 +1,8 @@
 <div>
     {% url 'index' as index_url %}
     <span>{% if request.path == index_url %}Home{% else %}<a href="{{ index_url }}">Home</a>{% endif %}</span>
-    {% url 'file_mgr:index' as file_mgr_url %}
+    {% url 'file_mgr:directory' '/' as file_mgr_url %}
     <span>{% if request.path == file_mgr_url %}Directory{% else %}<a href="{{ file_mgr_url }}">Directory</a>{% endif %}</span>
+    {% url 'plots:plots' as plots_url %}
+    <span>{% if request.path == plots_url %}Interactive Plots{% else %}<a href="{{ plots_url }}">Interactive Plots</a>{% endif %}</span>
 </div>

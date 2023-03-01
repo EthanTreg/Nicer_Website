@@ -6,3 +6,6 @@
 /nicer_website/static/
 /data/
 **/__pycache__
+**/*[Tt][Ee][Ss][Tt]*
+**/*[Tt][Ee][Mm][Pp]*.*
+/node_modules/

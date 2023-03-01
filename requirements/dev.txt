@@ -1,2 +1,5 @@
 -r prod.txt
 pylint==2.*
+numpy==1.*
+astropy==5.*
+matplotlib==3.*

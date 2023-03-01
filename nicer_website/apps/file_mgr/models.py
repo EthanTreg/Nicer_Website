@@ -8,17 +8,16 @@ class Item(models.Model):
     item_type = [(dir, 'Dir'), (file, 'File')]
 
     name = models.CharField(max_length=64)
-    path = models.CharField(max_length=100, blank=True, null=True)
+    path = models.CharField(max_length=100, default='/')
     type = models.CharField(max_length=4, choices=item_type, default=dir)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=('name', 'path', 'type'), name='unique_name_path_type'),
-            models.UniqueConstraint(
-                fields=('name', 'type'),
-                condition=models.Q(path__isnull=True),
-                name='unique_name_type'
-            ),
+        ]
+
+        indexes = [
+            models.Index(fields=['path'], name='path_idx'),
         ]
 
     def __str__(self):

@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'nicer_website.apps.file_mgr',
+    'nicer_website.apps.plots',
 ]
 
 MIDDLEWARE = [
@@ -120,13 +121,14 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
 
-with open('config.txt', mode='r', encoding='utf8') as f:
-    data_dir = json.load(f)['data_dir']
+with open('config.txt', mode='r', encoding='utf8') as file:
+    DATA_DIR = json.load(file)['data_dir']
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'nicer_website/static'),
-    ('nicer_data', data_dir)
+    ('nicer_data', DATA_DIR),
+    ('node_modules', os.path.join(BASE_DIR, 'node_modules/')),
 ]
 
 # Default primary key field type

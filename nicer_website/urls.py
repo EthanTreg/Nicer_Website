@@ -22,4 +22,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.index, name='index'),
     path('manager/', include('nicer_website.apps.file_mgr.urls')),
+    path('plots/', include('nicer_website.apps.plots.urls')),
 ]

@@ -1,43 +1,28 @@
 from django.shortcuts import render
-from django.core.serializers import serialize
 from django.http import HttpRequest, HttpResponse, JsonResponse
 
 from .models import Item
 
 
-def dir_file_fetcher(items, start, end):
-    dirs = items.filter(type=Item.item_type[0][0]).order_by('name')[start:end]
-    files = items.filter(type=Item.item_type[1][0]).order_by('name')[start:end]
+def dir_file_fetcher(start: int, end: int, path: str):
+    dirs = Item.objects.filter(path=path, type=Item.item_type[0][0]).order_by('name')[start:end]
+    files = Item.objects.filter(path=path, type=Item.item_type[1][0]).order_by('name')[start:end]
     return dirs, files
-
-
-def index(request: HttpRequest) -> HttpResponse:
-    items = Item.objects.filter(path=Item._meta.get_field('path').get_default()).order_by('type')
-    dirs, files = dir_file_fetcher(items, 0, 5)
-
-    return render(
-        request,
-        'file_mgr/directory.html', {
-            'current_dir': 'Root',
-            'dirs': dirs,
-            'files': files,
-        })
 
 
 def directory(request: HttpRequest, path) -> HttpResponse:
     if path:
-        path += '/'
+        path = path.strip('/') + '/'
 
-    sub_items = Item.objects.filter(path=path).order_by('type')
-    sub_dirs, sub_files = dir_file_fetcher(sub_items, 0, 5)
-    parent_path = '/'.join(path.split('/')[:-1])
+    sub_dirs, sub_files = dir_file_fetcher(0, 1, path)
+    parent_path = '/'.join(path.split('/')[:-2]) + '/'
 
     return render(
         request,
         'file_mgr/directory.html', {
             'current_dir': path,
-            'dirs': sub_dirs,
-            'files': sub_files,
+            'dirs_exist': sub_dirs.exists(),
+            'files_exist': sub_files.exists(),
             'parent_path': parent_path,
         })
 
@@ -67,8 +52,8 @@ def file_request(request: HttpRequest) -> JsonResponse:
     if path == 'Root':
         path = Item._meta.get_field('path').get_default()
 
-    sub_items = Item.objects.filter(path=path).order_by('type')
-    sub_dirs, sub_files = dir_file_fetcher(sub_items, start, end)
+    sub_dirs, sub_files = dir_file_fetcher(start, end, path)
+
     sub_dirs = list(sub_dirs.values())
     sub_files = list(sub_files.values())
 
