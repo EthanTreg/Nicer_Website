@@ -14,36 +14,45 @@
 {% block content %}
 <h1>Spectrum Plot</h1>
 
-<div class="row">
-    <div class="column">
-        <div class="dropdown">
-            <div>
-                <form action="{% url 'plots:plots'  %}" method="post" style="display: flex;">
-                    {% csrf_token %}
-                    <input id="observation-search" class="dropdown-field" name="file_path" type="text" placeholder="Observation ID..." onkeyup="fetchOptions(this)">
+<form action="{% url 'plots:plots' %}" method="post">
+    {% csrf_token %}
+    <div class="row">
+        <div class="column">
+            <div class="dropdown">
+                <div style="display: flex;">
+                    <input id="observation-search" class="dropdown-field" name="obs_id" type="text" value="{{ obs_id }}" placeholder="Observation ID..." onkeyup="fetchOptions(this)">
                     <button type="submit">Submit</button>
-                </form>
-            </div>
-            <div id="observation-options" class="dropdown-content"></div>
-        </div>
-    </div>
-
-    <div class="column">
-        <div class="dropdown">
-            <input id="quality-select" class="dropdown-field" type="text" placeholder="Quality..." readonly="true">
-            <div class="dropdown-content">
-                <button type="button" onclick="changeQuality(this)">Goddard</button>
-                <button type="button" onclick="changeQuality(this)">Gold</button>
-                <button type="button" onclick="changeQuality(this)">Silver</button>
-                <button type="button" onclick="changeQuality(this)">Radium</button>
-                <button type="button" onclick="changeQuality(this)">Pyrite</button>
+                </div>
+                <div id="observation-options" class="dropdown-content"></div>
             </div>
         </div>
+        
+        <div class="column">
+            <div class="dropdown">
+                <input id="quality-select" class="dropdown-field" name="quality" type="text" value="{{ quality }}" placeholder="Quality..." readonly="true">
+                <div class="dropdown-content">
+                    <button type="button" name="goddard" onclick="changeQuality(this)">Goddard</button>
+                    <button type="button" name="gold" onclick="changeQuality(this)">Gold</button>
+                    <button type="button" name="silver" onclick="changeQuality(this)">Silver</button>
+                    <button type="button" name="radium" onclick="changeQuality(this)">Radium</button>
+                    <button type="button" name="pyrite" onclick="changeQuality(this)">Pyrite</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="options" class="column">
+            <input id="spectrum" type="checkbox" name="spectrum" value=".jsgrp" {% if spectrum %}checked{% endif %}>
+            <label for="spectrum">Spectrum</label>
+            <input id="light-curve" type="checkbox" name="light-curve" value=".lc.gz" {% if light_curve %}checked{% endif %}>
+            <label for="light-curve">Light Curve</label>
+        </div>
     </div>
-</div>
+</form>
 
 {% autoescape off %}
-{{ plot_div }}
+{% for plot_div in plot_divs %}
+    {{ plot_div }}
+{% endfor %}
 {% endautoescape %}
 {% endblock %}
 

@@ -1,3 +1,7 @@
+"""
+Updates the database using Sqlite to match the folder
+structure of the specified directory found in config.txt
+"""
 import os
 import json
 import sqlite3
@@ -65,14 +69,14 @@ def linux_count(directory: str) -> int:
     integer
         Number of files and folders in the given directory
     """
-    ps = subprocess.run(
+    process_output = subprocess.run(
             ['find', directory, '-printf', '.'],
             capture_output=True,
             check=True,
     )
     process_output = subprocess.run(
         ['wc', '-c'],
-        input=ps.stdout,
+        input=process_output.stdout,
         capture_output=True,
         check=True,
     ).stdout
@@ -99,7 +103,7 @@ def universal_count(directory: str) -> int:
     for _, dirs, files in os.walk(directory):
         count += len(files) + len(dirs)
         print(f'\rCount: {count}', end='')
-    
+
     print()
     return count
 

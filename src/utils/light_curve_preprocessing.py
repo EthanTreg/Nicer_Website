@@ -2,8 +2,8 @@
 Utility to correct light curve data
 """
 import numpy as np
-import plotly.graph_objs as go
-from plotly.offline import plot
+
+from src.utils.plots import data_plot
 
 
 def light_curve_data(data_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -14,7 +14,7 @@ def light_curve_data(data_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray
     ----------
     data_path : string
         Path to the light curve
-    
+
     Returns
     -------
     tuple[ndarray, ndarray, ndarray]
@@ -46,32 +46,14 @@ def light_curve_plot(name: str, data_path: str) -> str:
     string
         Light curve plot as HTML
     """
-    # Get spectrum data
-    x_data, y_data, y_uncertainties = light_curve_data(data_path)
-    
-    # Plot spectrum
-    light_curve = go.Scatter(
-        x=x_data,
-        y=y_data,
-        error_y={
-        'type': 'data',
-        'array': y_uncertainties,
-        'visible': False,
-        },
-        mode='markers',
-        name='light_curve',
-        opacity=0.8,
-        marker_color='blue',
-    )
+    # Get light curve data
+    x_data, y_data, *_ = light_curve_data(data_path)
 
-    # Plot information
-    return plot(
-        {'data': [light_curve], 'layout': go.Layout(
-            title=f'{name} Light Curve',
-            xaxis_title=r'$\text{Relative Time}\ (s)$',
-            yaxis_title=r'$\text{Photons}\ (s^{-1} det^{-1})$',
-        )},
-        output_type='div',
-        include_plotlyjs=False,
-        config={'displaylogo': False},
+    # Plot light curve
+    return data_plot(
+        f'{name} Light Curve',
+        r'$\text{Relative Time}\ (s)$',
+        r'$\text{Photons}\ (s^{-1} det^{-1})$',
+        x_data,
+        y_data,
     )

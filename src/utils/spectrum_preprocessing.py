@@ -4,8 +4,8 @@ Utilities to normalise and bin spectra
 import numpy as np
 from numpy import ndarray
 from astropy.io import fits
-import plotly.graph_objs as go
-from plotly.offline import plot
+
+from src.utils.plots import data_plot
 
 
 def channel_kev(channel: ndarray) -> ndarray:
@@ -224,30 +224,13 @@ def spectrum_plot(
         background_dir=background_dir,
         cut_off=cut_off,
     )
-    
-    # Plot spectrum
-    spectrum = go.Scatter(
-        x=x_data,
-        y=y_data,
-        error_y={
-        'type': 'data',
-        'array': y_uncertainties,
-        'visible': True,
-        },
-        mode='markers',
-        name='spectrum',
-        opacity=0.8,
-        marker_color='blue',
-    )
 
-    # Plot information
-    return plot(
-        {'data': [spectrum], 'layout': go.Layout(
-            title=f'{name} Spectrum',
-            xaxis_title=r'$\text{Energy}\ (keV)$',
-            yaxis_title=r'$\text{Photons}\ (keV^{-1} s^{-1} det^{-1})$',
-        )},
-        output_type='div',
-        include_plotlyjs=False,
-        config={'displaylogo': False},
+    # Plot spectrum
+    return data_plot(
+        f'{name} Spectrum',
+        r'$\text{Energy}\ (keV)$',
+        r'$\text{Photons}\ (keV^{-1} s^{-1} det^{-1})$',
+        x_data,
+        y_data,
+        y_uncertainties,
     )

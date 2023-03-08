@@ -10,20 +10,19 @@ function addObservation(observation_option) {
     const OPTION = document.createElement('button');
     const OPTION_TEXT = document.createTextNode(observation_option.name);
 
+    OPTION.setAttribute('type', 'button');
     OPTION.appendChild(OPTION_TEXT);
 
     OPTION.addEventListener('click', () => {
-        const OBSERVATION_SEARCH = document.querySelector('#observation-search')
-        let observation_text = OBSERVATION_SEARCH.value.split('/').slice(0, -1).join('/') + '/'
-        OBSERVATION_SEARCH.value = observation_text + observation_option.name;
+        document.querySelector('#observation-search').value = observation_option.name;
     });
 
     document.querySelector('#observation-options').append(OPTION);
 };
 
-function fetchOptions(path) {
-    path = path.value
-    fetch(`/plots/fetch_observations?path=${path}`)
+function fetchOptions(obs_id) {
+    obs_id = obs_id.value
+    fetch(`/plots/fetch_observations?obs_id=${obs_id}`)
     .then(response => response.json())
     .then(data => {
         document.querySelector('#observation-options').innerHTML = '';
