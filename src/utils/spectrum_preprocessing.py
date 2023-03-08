@@ -176,10 +176,7 @@ def spectrum_data(
 
     # Bin data
     x_bin, y_bin, energy_bin = binning(x_data, y_data, bins)
-    uncertainty = np.maximum(
-        np.sqrt(np.maximum(counts_bin, 0)) / (spectrum_info['EXPOSURE'] * detectors),
-        1,
-    )
+    uncertainty = np.sqrt(np.maximum(counts_bin, 1)) / (spectrum_info['EXPOSURE'] * detectors)
 
     # Energy normalization
     y_bin /= energy_bin
