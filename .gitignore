@@ -3,7 +3,9 @@
 /.idea/
 /venv/
 /.git/
-/nicer_website/static/
+/nicer_website/static/*
+!/nicer_website/static/js
+!/nicer_website/static/css
 /data/
 **/__pycache__
 **/*[Tt][Ee][Ss][Tt]*

@@ -1,8 +1,11 @@
-import os
-
+"""
+Utilities to normalise and bin spectra
+"""
 import numpy as np
 from numpy import ndarray
 from astropy.io import fits
+import plotly.graph_objs as go
+from plotly.offline import plot
 
 
 def channel_kev(channel: ndarray) -> ndarray:
@@ -94,7 +97,7 @@ def binning(x_data: ndarray, y_data: ndarray, bins: ndarray) -> tuple[ndarray, n
 
 
 def spectrum_data(
-        spectrum_path: str,
+        data_path: str,
         background_dir: str = '',
         cut_off: list = None) -> tuple[ndarray, ndarray, ndarray, int]:
     """
@@ -104,7 +107,7 @@ def spectrum_data(
 
     Parameters
     ----------
-    spectrum_path : string
+    data_path : string
         File path to the spectrum
     background_dir : string, default = ''
         Path to the root directory where the background is located
@@ -122,7 +125,7 @@ def spectrum_data(
         cut_off = [0.3, 10]
 
     # Fetch spectrum & background fits files
-    with fits.open(spectrum_path) as file:
+    with fits.open(data_path) as file:
         spectrum_info = file[1].header
         spectrum = file[1].data
 
@@ -189,3 +192,62 @@ def spectrum_data(
     uncertainty = np.delete(uncertainty, cut_indices)
 
     return x_bin, y_bin, uncertainty, detectors
+
+
+def spectrum_plot(
+        name: str,
+        data_path: str,
+        background_dir: str = '',
+        cut_off: list = None) -> str:
+    """
+    Gets and plots the binned and corrected spectrum data
+
+    Parameters
+    ----------
+    name : string
+        Spectrum name
+    data_path : string
+        File path to the spectrum
+    background_dir : string, default = ''
+        Path to the root directory where the background is located
+    cut_off : list, default = [0.3, 10]
+        Range of accepted data in keV
+
+    Returns
+    -------
+    string
+        Spectrum plot as HTML
+    """
+    # Get spectrum data
+    x_data, y_data, y_uncertainties, *_ = spectrum_data(
+        data_path,
+        background_dir=background_dir,
+        cut_off=cut_off,
+    )
+    
+    # Plot spectrum
+    spectrum = go.Scatter(
+        x=x_data,
+        y=y_data,
+        error_y={
+        'type': 'data',
+        'array': y_uncertainties,
+        'visible': True,
+        },
+        mode='markers',
+        name='spectrum',
+        opacity=0.8,
+        marker_color='blue',
+    )
+
+    # Plot information
+    return plot(
+        {'data': [spectrum], 'layout': go.Layout(
+            title=f'{name} Spectrum',
+            xaxis_title=r'$\text{Energy}\ (keV)$',
+            yaxis_title=r'$\text{Photons}\ (keV^{-1} s^{-1} det^{-1})$',
+        )},
+        output_type='div',
+        include_plotlyjs=False,
+        config={'displaylogo': False},
+    )

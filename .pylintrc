@@ -1,2 +1,12 @@
 [MASTER]
-ignore-paths=.*/migrations
+ignore-paths=.*/migrations,(.)*_test\.py,test_(.)*\.py,test.py
+
+[BASIC]
+good-names=f, i, j, k, y
+good-names-rgxs=x[0-9]?$
+
+[TYPECHECK]
+ignored-classes=Item,HDUList
+
+[pylint.FORMAT]
+disable=logging-fstring-interpolation

@@ -4,20 +4,20 @@
 
 {% block head %}
 <style>
+.column {
+	float: left;
+	width: 50%;
+}
+
+.row::after {
+	clear: both;
+}
+
+@media screen and (max-width: 600px) {
 	.column {
-		float: left;
-		width: 50%;
+		width: 100%;
 	}
-
-	.row::after {
-		clear: both;
-	}
-
-	@media screen and (max-width: 600px) {
-		.column {
-			width: 100%;
-		}
-	}
+}
 </style>
 
 <script>
@@ -67,13 +67,10 @@
 	function currentDir() {
 		const HEADING_ELEMENT = document.createElement('h1');
 		let headingText = document.createTextNode('{{ current_dir }}');
-		console.log('{{ current_dir }}');
 
 		if ('{{ current_dir }}' == '/') {
 			headingText = document.createTextNode('Root');
-			console.log('test');
 		}
-		console.log(headingText);
 
 		HEADING_ELEMENT.appendChild(headingText);
 		document.querySelector(`#current_dir`).append(HEADING_ELEMENT);

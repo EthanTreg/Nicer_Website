@@ -1,121 +1,55 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block head %}
-<style>
-.dropdown {
-    position: relative;
-    display: inline-block;
-}
+<link rel="stylesheet" href="{% static '/css/plot.css' %}">
 
-.dropdown_content {
-    position: absolute;
-    background-color: #f6f6f6;
-    border: 1px solid #ddd;
-    z-index: 1;
-}
+<script src="https://cdn.plot.ly/plotly-2.18.2.min.js"></script>
+<script id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 
-#search_field {
-    box-sizing: border-box;
-    background-position: 6px;
-    background-repeat: no-repeat;
-    font-size: 16px;
-    border: none;
-    border-bottom: 1px solid #ddd;
-}
-
-#search_field:focus {
-    outline: none;
-    border-bottom: 3px solid #ddd;
-}
-
-.search_option {
-  color: black;
-  width: 100%;
-  padding: 6px;
-  font-size: 12px;
-  text-decoration: none;
-  display: block;
-  border: 1px solid #ddd;
-}
-
-.search_option:hover {
-    background-color: #ddd
-}
-
-.hidden {
-    display: none;
-}
-</style>
-
-<script src="{% static 'node_modules/plotly.js-dist-min/plotly.min.js' %}"></script>
-<script>
-    function addItem(search_option) {
-        const SEARCH_OPTION = document.createElement('button');
-        const ITEM_TEXT = document.createTextNode(search_option.name);
-
-        SEARCH_OPTION.appendChild(ITEM_TEXT);
-        SEARCH_OPTION.classList.add('search_option');
-
-        SEARCH_OPTION.addEventListener('click', () => {
-            const FIELD_ELEMENT = document.querySelector('#search_field')
-            let field_value = FIELD_ELEMENT.value.split('/').slice(0, -1).join('/') + '/'
-            FIELD_ELEMENT.value = field_value + search_option.name;
-        });
-
-        document.querySelector('#search_options').append(SEARCH_OPTION);
-    };
-
-    function fetchOptions(path) {
-        path = path.value
-        fetch(`/plots/fetch_observations?path=${path}`)
-        .then(response => response.json())
-        .then(data => {
-            document.querySelector('#search_options').innerHTML = '';
-            data.dir_suggestions.forEach(addItem);
-        })
-    };
-
-    document.addEventListener('DOMContentLoaded', () => {
-        const DIR_SEARCH = document.querySelector('#search_field');
-
-        DIR_SEARCH.addEventListener('blur', () => {
-            let options = document.getElementsByClassName('search_option');
-
-            setTimeout(() => {
-                for (let i = 0; i < options.length; i++) {
-                    options[i].classList.add('hidden');
-                }
-            }, 200);
-        })
-
-        DIR_SEARCH.addEventListener('focus', () => {
-            let options = document.getElementsByClassName('search_option');
-
-            for (let i = 0; i < options.length; i++) {
-                options[i].classList.remove('hidden');
-            }
-        })
-    })
-</script>
+<script src="{% static '/js/plot.js' %}"></script>
 {% endblock %}
 
 {% block title %}Plot{% endblock %}
 
-
 {% block content %}
 <h1>Spectrum Plot</h1>
-{% comment %}
-<img src="data:image/png;base64,{{ graphic|safe }}">
-{% endcomment %}
-<div class="dropdown_content">
-    <form id="spectrum_search" action="{% url 'plots:plots'  %}" method="post">
-        {% csrf_token %}
-        <input id="search_field" name="file_path" type="text" placeholder="Observation ID..." onkeyup="fetchOptions(this)" onblur="">
-        <button type="submit">Submit</button>
-    </form>
-    <div id="search_options"></div>
+
+<div class="row">
+    <div class="column">
+        <div class="dropdown">
+            <div>
+                <form action="{% url 'plots:plots'  %}" method="post" style="display: flex;">
+                    {% csrf_token %}
+                    <input id="observation-search" class="dropdown-field" name="file_path" type="text" placeholder="Observation ID..." onkeyup="fetchOptions(this)">
+                    <button type="submit">Submit</button>
+                </form>
+            </div>
+            <div id="observation-options" class="dropdown-content"></div>
+        </div>
+    </div>
+
+    <div class="column">
+        <div class="dropdown">
+            <input id="quality-select" class="dropdown-field" type="text" placeholder="Quality..." readonly="true">
+            <div class="dropdown-content">
+                <button type="button" onclick="changeQuality(this)">Goddard</button>
+                <button type="button" onclick="changeQuality(this)">Gold</button>
+                <button type="button" onclick="changeQuality(this)">Silver</button>
+                <button type="button" onclick="changeQuality(this)">Radium</button>
+                <button type="button" onclick="changeQuality(this)">Pyrite</button>
+            </div>
+        </div>
+    </div>
 </div>
+
 {% autoescape off %}
 {{ plot_div }}
 {% endautoescape %}
 {% endblock %}
+
+{% comment %}
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-bootstrap@next/dist/react-bootstrap.min.js"></script>
+<script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+{% endcomment %}
