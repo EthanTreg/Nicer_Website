@@ -1,48 +1,79 @@
-button[type="submit"] {
-    background-color: #f6f6f6;
-    border: 1px solid #ddd;
-    flex-grow: 1;
+:root {
+    --border-color: #ddd;
+    --bg-color: #f9f9f9;
+    --major-font-size: 16px;
+    --minor-font-size: 12px;
 }
-    
+
+button[type="submit"] {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    flex-grow: 1;
+    font-size: var(--major-font-size);
+}
+
 input {
-    border: none;
-    border-bottom: 1px solid #ddd;
-    font-size: 16px;
+    border: 1px solid var(--border-color);
+    box-sizing: border-box;
+    font-size: var(--major-font-size);
     padding: 6px;
 }
 
+input[type="text"] {
+    margin-bottom: 3px;
+    width: 100%;
+    transition-delay: 200ms;
+}
+
+label {
+    font-size: var(--major-font-size);
+}
+
 button:hover {
-    background-color: #ddd;
+    background-color: var(--border-color);
 }
 
 input:focus {
-    border-bottom: 3px solid #ddd;
+    border-bottom: 3px solid var(--border-color);
+    margin-bottom: 0px;
+    transition-delay: 0s;
     outline: none;
 }
 
 .column {
-    flex: 33%;
+    flex-grow: 1;
+    position: relative;
+}
+
+.column:has(button[type="submit"]) {
+    display: flex;
+}
+
+.dropdown * {
+    width: 100%;
 }
 
 .dropdown {
-    background-color: #f6f6f6;
-    border: 1px solid #ddd;
+    width: 100%;
+}
+
+.dropdown-content {
     position: absolute;
     z-index: 1;
 }
 
 .dropdown-content * {
-    background-color: #f9f9f9;
-    border: 1px solid #ddd;
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
     display: none;
-    font-size: 12px;
+    font-size: var(--minor-font-size);
     padding: 6px;
-    width: 100%;
-    z-index: 1;
 }
 
 .row {
+    column-gap: 10px;
     display: flex;
+    flex-wrap: wrap;
 }
 
 .show * {

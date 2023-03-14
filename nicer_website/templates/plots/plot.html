@@ -3,8 +3,14 @@
 {% block head %}
 <link rel="stylesheet" href="{% static '/css/plot.css' %}">
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.18.2.min.js"></script>
 <script id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+<script>
+    const PLOT_GRAPH_URL = "{% url 'plots:plot_data' %}";
+    const PLOT_GTI_URL = "{% url 'plots:plot_gti' %}";
+</script>
 
 <script src="{% static '/js/plot.js' %}"></script>
 {% endblock %}
@@ -14,51 +20,41 @@
 {% block content %}
 <h1>Spectrum Plot</h1>
 
-<form action="{% url 'plots:plots' %}" method="post">
+<form id="plot-graph" method="post">
     {% csrf_token %}
     <div class="row">
         <div class="column">
             <div class="dropdown">
-                <div style="display: flex;">
-                    <input id="observation-search" class="dropdown-field" name="obs_id" type="text" value="{{ obs_id }}" placeholder="Observation ID..." onkeyup="fetchOptions(this)">
-                    <button type="submit">Submit</button>
-                </div>
+                <input id="observation-search" class="dropdown-field" name="obs_id" type="text" value="{{ obsID }}" placeholder="Observation ID...">
                 <div id="observation-options" class="dropdown-content"></div>
             </div>
         </div>
-        
+
         <div class="column">
             <div class="dropdown">
                 <input id="quality-select" class="dropdown-field" name="quality" type="text" value="{{ quality }}" placeholder="Quality..." readonly="true">
                 <div class="dropdown-content">
-                    <button type="button" name="goddard" onclick="changeQuality(this)">Goddard</button>
-                    <button type="button" name="gold" onclick="changeQuality(this)">Gold</button>
-                    <button type="button" name="silver" onclick="changeQuality(this)">Silver</button>
-                    <button type="button" name="radium" onclick="changeQuality(this)">Radium</button>
-                    <button type="button" name="pyrite" onclick="changeQuality(this)">Pyrite</button>
+                    <button class="change-quality" type="button" name="goddard">Goddard</button>
+                    <button class="change-quality" type="button" name="gold">Gold</button>
+                    <button class="change-quality" type="button" name="silver">Silver</button>
+                    <button class="change-quality" type="button" name="radium">Radium</button>
+                    <button class="change-quality" type="button" name="pyrite">Pyrite</button>
                 </div>
             </div>
         </div>
-        
+
         <div id="options" class="column">
-            <input id="spectrum" type="checkbox" name="spectrum" value=".jsgrp" {% if spectrum %}checked{% endif %}>
-            <label for="spectrum">Spectrum</label>
-            <input id="light-curve" type="checkbox" name="light-curve" value=".lc.gz" {% if light_curve %}checked{% endif %}>
-            <label for="light-curve">Light Curve</label>
+            <input id="spectrum-check" type="checkbox" name="spectrum" value=".jsgrp" {% if spectrum %}checked{% endif %}>
+            <label for="spectrum-check">Spectrum</label>
+            <input id="light-curve-check" type="checkbox" name="light-curve" value=".lc.gz" {% if lightCurve %}checked{% endif %}>
+            <label for="light-curve-check">Light Curve</label>
+        </div>
+
+        <div class="column">
+            <button type="submit">Submit</button>
         </div>
     </div>
 </form>
 
-{% autoescape off %}
-{% for plot_div in plot_divs %}
-    {{ plot_div }}
-{% endfor %}
-{% endautoescape %}
+<div id="plots"></div>
 {% endblock %}
-
-{% comment %}
-<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/react-bootstrap@next/dist/react-bootstrap.min.js"></script>
-<script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-{% endcomment %}

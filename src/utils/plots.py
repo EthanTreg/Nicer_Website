@@ -10,9 +10,10 @@ def data_plot(
         title: str,
         x_axis: str,
         y_axis: str,
-        x_data: ndarray,
-        y_data: ndarray,
-        y_uncertainties: ndarray = None) -> str:
+        gti_numbers: list[int],
+        x_data_list: list[ndarray],
+        y_data_list: list[ndarray],
+        y_uncertainties: list[ndarray] = None) -> str:
     """
     Plots data with uncertainties if provided
 
@@ -24,40 +25,52 @@ def data_plot(
         x-axis label
     y_axis : string
         y-axis label
-    x_data : ndarray
-        x-axis data
-    y_data : ndarray
-        y-axis data
-    y_uncertainties : ndarray
-        y-axis uncertainty
+    gti_numbers : list[integer]
+        List of GTI numbers
+    x_data_list : list[ndarray]
+        List of x-axis data
+    y_data_list : list[ndarray]
+        List of y-axis data
+    y_uncertainties : list[ndarray]
+        List of y-axis uncertainty
 
     Returns
     -------
     string
         Plot as HTML
     """
-    if y_uncertainties is None:
-        y_uncertainties = None
-    else:
-        y_uncertainties = {
-            'type': 'data',
-            'array': y_uncertainties,
-            'visible': True,
-        }
+    plot_data = []
+
+    if not y_uncertainties:
+        y_uncertainties = [None] * len(x_data_list)
 
     # Plot data
-    plot_data = go.Scatter(
-        x=x_data,
-        y=y_data,
-        error_y=y_uncertainties,
-        mode='markers',
-        name='spectrum',
-        opacity=0.8,
-        marker_color='blue',
-    )
+    for number, x_data, y_data, y_uncertainty in zip(
+        gti_numbers,
+        x_data_list,
+        y_data_list,
+        y_uncertainties
+    ):
+        if y_uncertainty is not None:
+            y_uncertainty = {
+                'type': 'data',
+                'array': y_uncertainty,
+                'visible': True,
+            }
+
+        test = go.Scatter(
+            x=x_data,
+            y=y_data,
+            error_y=y_uncertainty,
+            mode='markers',
+            name=f'GTI{number}',
+            opacity=0.8,
+        )
+
+        plot_data.append(test)
 
     return plot(
-        {'data': [plot_data], 'layout': go.Layout(
+        {'data': plot_data, 'layout': go.Layout(
             title=title,
             xaxis_title=x_axis,
             yaxis_title=y_axis,
