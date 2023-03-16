@@ -1,4 +1,31 @@
-/* global PLOT_GRAPH_URL PLOT_GTI_URL */
+/* global PLOT_GRAPH_URL PLOT_GTI_URL MathJax */
+
+/**
+ * Generates a grid layout with a column for each element input.
+ *
+ * Supports jQuery.
+ * @param {Array.<HTMLElement>} elements
+ * List of HTML elements to spread over a column layout
+ * @returns {HTMLDivElement}
+ * Grid layout as an HTML div element
+ * containing columns with each inputted element
+ */
+function columnLayout(elements) {
+  const ROW = document.createElement('div');
+
+  ROW.classList.add('row');
+
+  // For each element, create a column containing the element
+  for (const ELEMENT of elements) {
+    const COLUMN = document.createElement('div');
+
+    COLUMN.classList.add('column');
+    $(COLUMN).append(ELEMENT);
+    $(ROW).append(COLUMN);
+  }
+
+  return ROW;
+}
 
 /**
  * Updates the quality setting when the user activates a quality button.
@@ -44,6 +71,80 @@ function fetchOptions(obsID) {
     });
 }
 
+function displayInfo(info) {
+  const TABLE_INFO = {
+    headers: [
+      'GTI',
+      'Source',
+      'MJD',
+      String.raw`RA \((^\circ)\)`,
+      String.raw`DEC \((^\circ)\)`,
+      String.raw`Exposure Time \((s)\)`,
+      'Detectors Count',
+      String.raw`Under Shoot Rate \((s^{-1})\)`,
+      String.raw`Over Shoot Rate \((s^{-1})\)`,
+      'COR SAX',
+    ],
+    keys: [
+      'GTI',
+      'OBJECT',
+      'TSTART_MJD_UTC',
+      'RA',
+      'DEC',
+      'EXPTIME',
+      'NDETS_USED',
+      'USHOOT_NET_RATE',
+      'OSHOOT_NET_RATE',
+      'COR_SAX',
+    ],
+    precision: [null, null, 3, 2, 2, 2, 0, 2, 4, 3],
+  };
+  const CONTAINER = $('<div>');
+  const TABLE = $('<table>');
+  const HEADER_ROW = $('<tr>');
+  const BUTTON = $(
+    '<button id="table-button" type="button">Expand Table</button>',
+  );
+
+  for (const HEADER of TABLE_INFO.headers) {
+    HEADER_ROW.append($(`<th>${HEADER}</th>`));
+  }
+
+  TABLE.append(HEADER_ROW);
+
+  for (const [J, GTI] of info.entries()) {
+    const DATA_ROW = $('<tr></tr>');
+
+    for (let i = 0; i < TABLE_INFO.headers.length; i++) {
+      let data = GTI[TABLE_INFO.keys[i]];
+
+      if (TABLE_INFO.precision[i] != null) {
+        data = (+data).toFixed(TABLE_INFO.precision[i]);
+      }
+
+      DATA_ROW.append($(`<td>${data}</td>`));
+    }
+
+    if (J !== 0) {
+      DATA_ROW.addClass('hide');
+    }
+
+    TABLE.append(DATA_ROW);
+  }
+
+  CONTAINER.append(TABLE);
+  CONTAINER.append(BUTTON);
+
+  BUTTON.click(() => {
+    TABLE.children().slice(2).toggleClass('hide');
+    BUTTON.html(
+      BUTTON.html() === 'Expand Table' ? 'Collapse Table' : 'Expand Table',
+    );
+  });
+
+  return CONTAINER;
+}
+
 /**
  * Fetches and plots GTIs from the search field for the given plot type.
  * @param {String} obsID Observation ID
@@ -81,33 +182,6 @@ function fetchGTI(obsID) {
       },
     });
   });
-}
-
-/**
- * Generates a grid layout with a column for each element input.
- *
- * Supports JQuery.
- * @param {Array.<HTMLElement>} elements
- * List of HTML elements to spread over a column layout
- * @returns {HTMLDivElement}
- * Grid layout as an HTML div element
- * containing columns with each inputted element
- */
-function columnLayout(elements) {
-  const ROW = document.createElement('div');
-
-  ROW.classList.add('row');
-
-  // For each element, create a column containing the element
-  for (const ELEMENT of elements) {
-    const COLUMN = document.createElement('div');
-
-    COLUMN.classList.add('column');
-    $(COLUMN).append(ELEMENT);
-    $(ROW).append(COLUMN);
-  }
-
-  return ROW;
 }
 
 /**
@@ -170,6 +244,11 @@ function fetchGraphPlots() {
       url: PLOT_GRAPH_URL,
       data: SERIALIZED_DATA,
       success: function (response) {
+        // Recreate info table
+        $('#obs-info').empty();
+        $('#obs-info').append(displayInfo(response.info));
+        MathJax.typeset();
+
         // Clears current plots
         $('#plots').empty();
 

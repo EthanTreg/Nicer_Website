@@ -5,11 +5,15 @@
     --minor-font-size: 12px;
 }
 
-button[type="submit"] {
+button {
     background-color: var(--bg-color);
     border: 1px solid var(--border-color);
     flex-grow: 1;
     font-size: var(--major-font-size);
+}
+
+button:hover {
+    background-color: var(--border-color);
 }
 
 input {
@@ -21,8 +25,8 @@ input {
 
 input[type="text"] {
     margin-bottom: 3px;
-    width: 100%;
     transition-delay: 200ms;
+    width: 100%;
 }
 
 input[type="range"] {
@@ -30,19 +34,32 @@ input[type="range"] {
     width: 100%;
 }
 
+input:focus {
+    border-bottom: 3px solid var(--border-color);
+    margin-bottom: 0px;
+    outline: none;
+    transition-delay: 0s;
+}
+
 label {
     font-size: var(--major-font-size);
 }
 
-button:hover {
-    background-color: var(--border-color);
+table {
+    border-collapse: collapse;
+    width: 100%;
 }
 
-input:focus {
-    border-bottom: 3px solid var(--border-color);
-    margin-bottom: 0px;
-    transition-delay: 0s;
-    outline: none;
+td, th {
+    border: 1px solid;
+}
+
+td {
+    text-align: center;
+}
+
+tr:nth-child(even) {
+    background-color: var(--border-color);
 }
 
 .column {
@@ -79,6 +96,10 @@ input:focus {
     column-gap: 10px;
     display: flex;
     flex-wrap: wrap;
+}
+
+.hide {
+    display: none;
 }
 
 .show * {
