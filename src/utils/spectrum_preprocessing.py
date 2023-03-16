@@ -7,6 +7,7 @@ import numpy as np
 from numpy import ndarray
 from astropy.io import fits
 
+from src.utils.utils import min_bin
 from src.utils.plots import data_plot
 
 
@@ -48,7 +49,7 @@ def create_bin(
         Lower limit of data that will be binned
     chi : float
         Upper limit of datat that will be binned
-    nchan : int
+    nchan : integer
         Number of channels per bin
 
     Returns
@@ -98,7 +99,80 @@ def binning(x_data: ndarray, y_data: ndarray, bins: ndarray) -> tuple[ndarray, n
     return x_bin, y_bin, energy_bin
 
 
+# def spectrum_data(
+#         data_path: str,
+#         cut_off: list = None) -> tuple[ndarray, ndarray, ndarray, int]:
+#     """
+#     Fetches binned data from spectrum
+
+#     Returns the binned x, y spectrum data as a 2D array
+
+#     Parameters
+#     ----------
+#     data_path : string
+#         File path to the spectrum
+#     cut_off : list, default = [0.3, 10]
+#         Range of accepted data in keV
+
+#     Returns
+#     -------
+#     (ndarray, ndarray, ndarray, integer)
+#         Binned energies, binned spectrum data, binned uncertainties & number of detectors
+#     """
+#     bins = np.array([[0, 20, 248, 600, 1200, 1494, 1500], [2, 3, 4, 5, 6, 2, 1]], dtype=int)
+
+#     if not cut_off:
+#         cut_off = [0.3, 10]
+
+#     # Fetch spectrum & background fits files
+#     with fits.open(data_path) as file:
+#         spectrum_info = file[1].header
+#         spectrum = file[1].data
+#         response = spectrum_info['RESPFILE']
+#         detectors = int(re.search(r'_d(\d+)', response).group(1))
+
+#     with fits.open(data_path.replace('.jsgrp', '.bg')) as file:
+#         background_info = file[1].header
+#         background = file[1].data
+
+
+#     # Pre binned data
+#     x_data = channel_kev(spectrum['CHANNEL'])
+#     y_data = (
+#         spectrum['COUNTS'] /
+#         spectrum_info['EXPOSURE'] - background['COUNTS'] /
+#         background_info['EXPOSURE']
+#     ) / detectors
+
+#     counts_bin = binning(x_data, spectrum['COUNTS'], bins)[1]
+
+#     # Bin data
+#     x_bin, (y_bin, background_bin), uncertainty = min_bin(
+#         10,
+#         x_data,
+#         np.stack((spectrum['COUNTS'], background['COUNTS'])),
+#     )
+
+#     y_bin = (y_bin / spectrum_info['EXPOSURE'] - background_bin / background_info['EXPOSURE']) / detectors
+#     x_bin, y_bin, energy_bin = binning(x_data, y_data, bins)
+#     uncertainty = np.sqrt(np.maximum(counts_bin, 1)) / (spectrum_info['EXPOSURE'] * detectors)
+
+#     # Energy normalization
+#     y_bin /= energy_bin
+#     uncertainty /= energy_bin
+
+#     # Energy range cut-off
+#     cut_indices = np.argwhere((x_bin < cut_off[0]) | (x_bin > cut_off[1]))
+#     x_bin = np.delete(x_bin, cut_indices)
+#     y_bin = np.delete(y_bin, cut_indices)
+#     uncertainty = np.delete(uncertainty, cut_indices)
+#     print(x_bin.shape)
+
+#     return x_bin, y_bin, uncertainty, detectors
+
+
 def spectrum_data(
+        min_value: int,
         data_path: str,
         cut_off: list = None) -> tuple[ndarray, ndarray, ndarray, int]:
     """
@@ -115,11 +189,9 @@ def spectrum_data(
 
     Returns
     -------
-    (ndarray, ndarray, ndarray, integer)
+    tuple[ndarray, ndarray, ndarray, integer]
         Binned energies, binned spectrum data, binned uncertainties & number of detectors
     """
-    bins = np.array([[0, 20, 248, 600, 1200, 1494, 1500], [2, 3, 4, 5, 6, 2, 1]], dtype=int)
-
     if not cut_off:
         cut_off = [0.3, 10]
 
@@ -137,37 +209,20 @@ def spectrum_data(
 
     # Pre binned data
     x_data = channel_kev(spectrum['CHANNEL'])
-    if 'COUNTS' in spectrum.dtype.names and 'COUNTS' in background.dtype.names:
-        y_data = (
-                 spectrum['COUNTS'] /
-                 spectrum_info['EXPOSURE'] - background['COUNTS'] /
-                 background_info['EXPOSURE']
-                 ) / detectors
-
-        counts_bin = binning(x_data, spectrum['COUNTS'], bins)[1]
-    elif 'COUNTS' in spectrum.dtype.names:
-        y_data = (
-                 spectrum['COUNTS'] /
-                 spectrum_info['EXPOSURE'] - background['RATE']
-         ) / detectors
-
-        counts_bin = binning(x_data, spectrum['COUNTS'], bins)[1]
-    else:
-        y_data = (spectrum['RATE'] - background['RATE']) / detectors
-
-        counts_bin = binning(
-            x_data,
-            (spectrum['RATE'] * spectrum_info['EXPOSURE']),
-            bins
-        )[1]
+    energy = x_data[1] - x_data[0]
 
     # Bin data
-    x_bin, y_bin, energy_bin = binning(x_data, y_data, bins)
-    uncertainty = np.sqrt(np.maximum(counts_bin, 1)) / (spectrum_info['EXPOSURE'] * detectors)
+    x_bin, (y_bin, background_bin), uncertainty = min_bin(
+        min_value,
+        x_data,
+        np.stack((spectrum['COUNTS'], background['COUNTS'])),
+    )
 
-    # Energy normalization
-    y_bin /= energy_bin
-    uncertainty /= energy_bin
+    # Normalization
+    y_bin = (
+        y_bin / spectrum_info['EXPOSURE'] - background_bin / background_info['EXPOSURE']
+    ) / (detectors * energy)
+    uncertainty /= spectrum_info['EXPOSURE'] * detectors * energy
 
     # Energy range cut-off
     cut_indices = np.argwhere((x_bin < cut_off[0]) | (x_bin > cut_off[1]))
@@ -178,7 +233,11 @@ def spectrum_data(
     return x_bin, y_bin, uncertainty, detectors
 
 
-def spectrum_plot(data_paths: list[str], gti_numbers: list[int], cut_off: list = None) -> str:
+def spectrum_plot(
+        min_value: int,
+        data_paths: list[str],
+        gti_numbers: list[int],
+        cut_off: list = None) -> str:
     """
     Gets and plots the binned and corrected spectra
 
@@ -203,10 +262,7 @@ def spectrum_plot(data_paths: list[str], gti_numbers: list[int], cut_off: list =
 
     # Get spectrum data
     for data_path in data_paths:
-        data = spectrum_data(
-            data_path,
-            cut_off=cut_off,
-        )
+        data = spectrum_data(min_value, data_path, cut_off=cut_off)
 
         x_data.append(data[0])
         y_data.append(data[1])
@@ -222,3 +278,4 @@ def spectrum_plot(data_paths: list[str], gti_numbers: list[int], cut_off: list =
         y_data,
         y_uncertainties,
     )
+

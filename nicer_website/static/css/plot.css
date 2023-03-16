@@ -25,6 +25,11 @@ input[type="text"] {
     transition-delay: 200ms;
 }
 
+input[type="range"] {
+    padding: 0px;
+    width: 100%;
+}
+
 label {
     font-size: var(--major-font-size);
 }

@@ -17,6 +17,7 @@ from src.utils.light_curve_preprocessing import light_curve_plot
 # Log axis
 # Get feedback
 
+# Global variable
 plots = {
     'spectrum': {
         'exists': False,
@@ -31,37 +32,23 @@ plots = {
 }
 
 
-def fetch_obs_files(request: HttpRequest) -> JsonResponse:
+def plot_gti(request: HttpRequest) -> JsonResponse:
     """
-    Fetches files from the specified observation ID using POST request
+    Plots multiple GTI observations for a single plot
 
     Parameters
     ----------
     request : HttpRequest
-        POST request containing the variable 'obs_id', which corresponds to the desired observation ID
+        Http request containing the variables GTI query (gti-search), observation ID (obs_id),
+        pipeline quality (quality) and plot type (plot_type)
 
     Returns
     -------
     JsonResponse
-        Json response containing a list of files for the corresponding observation ID
+        Json response containing the plot as a list of the HTML element (plotDivs)
     """
     # Constants
-
-    print(request.POST)
-
-    # Get file information
-    obs_id = settings.DATA_DIR + request.POST.get('obs_id')
-    dir_path = f'/{obs_id}/jspipe/'
-
-    files = Item.objects.filter(path=dir_path, type=Item.item_type[1][0]).order_by('name')
-
-    for plot_type in plots.values():
-        files.filter(name__contains=plot_type['file_type'])
-
-    return JsonResponse({'files': list(files.values())})
-
-
-def plot_gti(request: HttpRequest) -> JsonResponse:
+    min_value = int(request.POST['min_value'])
     gti_query = request.POST['gti-search']
     obs_id = request.POST['obs_id']
     quality = request.POST['quality']
@@ -70,32 +57,44 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
     gti_list = []
     file_names = []
 
-    gti_query = re.sub('[^\d,-]', '', gti_query).split(',')
-
-    for gti in gti_query:
-        if '-' in gti:
-            gti_range = list(map(int, gti.split('-')))
-            gti_range[-1] += 1
-            gti_list.extend(range(*gti_range))
-        else:
-            gti_list.append(int(gti))
-
+    # Filter by quality, observation ID, and filter for files
     files = Item.objects.filter(
         name__contains=quality,
         path=dir_path,
         type=Item.item_type[1][0],
     ).order_by('name')
 
+    # Filter by the plot type and append relative file location to data path
     dir_path = f'{settings.DATA_DIR}/{dir_path}'
     files = files.filter(name__contains=plots[plot_type]['file_type'])
 
-    for gti in gti_list:
-        file_name = files.filter(name__regex=fr'^\w*GTI{gti}[^\d][-_.\w]*$').first()
+    # If GTI query is not empty, use query, else use first available GTI
+    if gti_query:
+        # Remove characters that are not numbers or dashes, and separate by commas
+        gti_query = re.sub(r'[^\d,-]', '', gti_query).split(',')
 
-        if file_name:
-            file_names.append(dir_path + file_name.name)
+        # Convert dashes to a list of integers in the range of the two numbers
+        for gti in gti_query:
+            if '-' in gti:
+                gti_range = list(map(int, gti.split('-')))
+                gti_range[-1] += 1
+                gti_list.extend(range(*gti_range))
+            else:
+                gti_list.append(int(gti))
 
-    plot_divs = plots[plot_type]['function'](file_names, gti_list)
+        # Filter for each GTI
+        for gti in gti_list:
+            file_name = files.filter(name__regex=fr'^\w*GTI{gti}[^\d][-_.\w]*$').first()
+
+            if file_name:
+                file_names.append(dir_path + file_name.name)
+    else:
+        file_name = files.first().name
+        gti_list = re.search(r'GTI(\d+)', file_name).group(1)
+        file_names.append(dir_path + file_name)
+
+    # Plot each GTI
+    plot_divs = plots[plot_type]['function'](min_value, file_names, gti_list)
 
     return JsonResponse({'plotDivs': [plot_divs]})
 
@@ -115,11 +114,12 @@ def plot_data(request: HttpRequest) -> JsonResponse:
     Returns
     -------
     JsonResponse
-        Json response containing the plots as HTML elements (plot_divs), observation ID (obs_id),
-        quality (quality), if spectrum is plotted (spectrum),
-        and if light curve is plotted (light_curve)
+        Json response containing the plots as a list of HTML elements (plotDivs),
+        observation ID (obsID), quality (quality), if spectrum is plotted (spectrum),
+        and if light curve is plotted (lightCurve)
     """
     # Constants
+    min_value = 100
     quality = ''
     obs_id = request.POST['obs_id']
     quality = request.POST['quality']
@@ -146,7 +146,7 @@ def plot_data(request: HttpRequest) -> JsonResponse:
                 file_name = file_names.first().name
                 max_gti.append(len(file_names))
 
-                plot_divs.append(plot_type['function']([dir_path + file_name], [0]))
+                plot_divs.append(plot_type['function'](min_value, [dir_path + file_name], [0]))
 
     except AttributeError:
         log.error(f'No valid data in {dir_path}')
@@ -184,12 +184,12 @@ def fetch_observations(request: HttpRequest, count: int = 5) -> JsonResponse:
 
     # Query the database for the first 5 observation IDs that match the query
     suggested_obs = Item.objects.filter(
-        name__contains=obs_id,
+        name__startswith=obs_id,
         path=root,
         type=Item.item_type[0][0],
     ).order_by('name')[:count]
 
-    return JsonResponse({'dir_suggestions': list(suggested_obs.values())})
+    return JsonResponse({'dir_suggestions': list(suggested_obs.values_list('name', flat=True))})
 
 
 def interactive_plot(request: HttpRequest) -> HttpResponse:
