@@ -10,6 +10,7 @@ button {
     border: 1px solid var(--border-color);
     flex-grow: 1;
     font-size: var(--major-font-size);
+    width: 100%;
 }
 
 button:hover {

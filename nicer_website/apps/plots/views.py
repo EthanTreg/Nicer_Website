@@ -15,23 +15,22 @@ from src.utils.light_curve_preprocessing import light_curve_plot
 
 # Log axis
 # Get feedback
-# Background
-# Log
-# Groupings
 # Bin width error bars
-# Info field (exposure time, example page, source name, under/over shoot, cor sax, number detectors, avg count, MJD, RA, DEC)
-# Fix light curve uncertainty
+# Info field (avg count)
+# Ability to choose grouping binning
 # Photos
 
 # Global variable
 plots = {
     'spectrum': {
         'exists': False,
+        'min_value': None,
         'file_type': '.jsgrp',
         'function': spectrum_plot,
     },
     'light_curve': {
         'exists': False,
+        'min_value': 100,
         'file_type': '.lc.gz',
         'function': light_curve_plot,
     }
@@ -79,11 +78,11 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
 
     # Convert dashes to a list of integers in the range of the two numbers
     for gti in gti_query:
-        if '-' in gti:
+        if re.search(r'\d+-\d+', gti):
             gti_range = list(map(int, gti.split('-')))
             gti_range[-1] += 1
             gti_list.extend(range(*gti_range))
-        elif gti:
+        elif gti.isdigit():
             gti_list.append(int(gti))
 
     # Filter for each GTI
@@ -93,6 +92,7 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
         if file_name:
             file_names.append(dir_path + file_name.name)
 
+    # If not GTI found, use the first available GTI
     if not file_names:
         file_name = files.first().name
         gti_list = re.search(r'GTI(\d+)', file_name).group(1)
@@ -124,7 +124,6 @@ def plot_data(request: HttpRequest) -> JsonResponse:
         and if light curve is plotted (lightCurve)
     """
     # Constants
-    min_value = 100
     quality = ''
     obs_id = request.POST['obs_id']
     quality = request.POST['quality']
@@ -144,6 +143,22 @@ def plot_data(request: HttpRequest) -> JsonResponse:
 
     # Try to get data for specified plots
     try:
+        # Get summary files for each GTI
+        file_names = np.array(
+            files.filter(name__contains='BGDATA.summary').values_list('name', flat=True)
+        )
+
+        # Sort by GTI number
+        indices = np.argsort(
+            [int(re.search(r'GTI(\d+)', file_name).group(1)) for file_name in file_names]
+        )
+
+        # Get GTI info
+        for file_name in file_names[indices]:
+            file_name = dir_path + file_name
+            info = np.char.replace(np.loadtxt(file_name, dtype=str, unpack=True), "'", '')
+            infos.append(dict(zip(*info)) | {'GTI': re.search('GTI\d+', file_name).group(0)})
+
         # Plot depending on the data type
         for plot_type in plots.values():
             if plot_type['file_type'] in request.POST.values():
@@ -152,23 +167,14 @@ def plot_data(request: HttpRequest) -> JsonResponse:
                 file_name = file_names.first().name
                 max_gti.append(len(file_names))
 
-                plot_divs.append(plot_type['function'](min_value, [dir_path + file_name], [0]))
+                plot_divs.append(plot_type['function'](
+                    plot_type['min_value'],
+                    [dir_path + file_name],
+                    [0],
+                ))
 
-        file_names = np.array(
-            files.filter(name__contains='BGDATA.summary').values_list('name', flat=True)
-        )
-
-        indices = np.argsort(
-            [int(re.search(r'GTI(\d+)', file_name).group(1)) for file_name in file_names]
-        )
-
-        for file_name in file_names[indices]:
-            file_name = dir_path + file_name
-            info = np.char.replace(np.loadtxt(file_name, dtype=str, unpack=True), "'", '')
-            infos.append(dict(zip(*info)) | {'GTI': re.search('GTI\d+', file_name).group(0)})
-
-    except AttributeError:
-        log.error(f'No valid data in {dir_path}')
+    except AttributeError as error:
+        log.error(f'{error}\nNo valid data in {dir_path}')
 
     return JsonResponse({
         'plotDivs': plot_divs,

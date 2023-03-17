@@ -103,7 +103,7 @@ function displayInfo(info) {
   const TABLE = $('<table>');
   const HEADER_ROW = $('<tr>');
   const BUTTON = $(
-    '<button id="table-button" type="button">Expand Table</button>',
+    '<button type="button">&#x2304</button>',
   );
 
   for (const HEADER of TABLE_INFO.headers) {
@@ -138,7 +138,7 @@ function displayInfo(info) {
   BUTTON.click(() => {
     TABLE.children().slice(2).toggleClass('hide');
     BUTTON.html(
-      BUTTON.html() === 'Expand Table' ? 'Collapse Table' : 'Expand Table',
+      /\u2304/.test(BUTTON.html()) ? '&#x2303' : '&#x2304',
     );
   });
 

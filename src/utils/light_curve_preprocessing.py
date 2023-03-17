@@ -2,12 +2,13 @@
 Utility to correct light curve data
 """
 import numpy as np
+from numpy import ndarray
 
 from src.utils.utils import min_bin
 from src.utils.plots import data_plot
 
 
-def light_curve_data(min_value: int, data_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def light_curve_data(min_value: int, data_path: str) -> tuple[ndarray, ndarray, ndarray, ndarray]:
     """
     Fetches and corrects light curve data
 
@@ -20,25 +21,29 @@ def light_curve_data(min_value: int, data_path: str) -> tuple[np.ndarray, np.nda
 
     Returns
     -------
-    tuple[ndarray, ndarray, ndarray]
-        Relative time, light curve and uncertainties
+    tuple[ndarray, ndarray, ndarray, ndarray]
+        Relative time, light curve, background, and uncertainties
     """
     time, counts, detectors = np.loadtxt(data_path, usecols=[0, 2, 3], unpack=True)
     background = np.loadtxt(data_path.replace('.lc.gz', '.bg-lc.gz'), usecols=2)
 
-    uncertainty = np.sqrt(np.maximum(counts, 1))
-    min_value /= (time[1] - time[0])
+    # Constants
+    detectors = detectors[0]
+    time_diff = time[1] - time[0]
+    counts *= time_diff
 
-    (x_bin, detectors), (y_bin, background_bin), uncertainty = min_bin(
+    # Bin data
+    (y_bin, bg_bin, x_bin), uncertainties = min_bin(
         min_value,
-        np.stack((time, detectors)),
-        np.stack((counts, background)),
+        np.stack((counts, background, time)),
     )
 
-    y_bin = (y_bin - background_bin) / detectors
-    uncertainty /= detectors
+    # Normalise data
+    y_bin = (y_bin - bg_bin) / (detectors * time_diff)
+    bg_bin /= detectors
+    uncertainties /= detectors * time_diff
 
-    return x_bin, y_bin, uncertainty
+    return x_bin, y_bin, bg_bin, uncertainties[0]
 
 
 def light_curve_plot(min_value: int, data_paths: str, gti_numbers: list[int]) -> str:
@@ -62,6 +67,7 @@ def light_curve_plot(min_value: int, data_paths: str, gti_numbers: list[int]) ->
     # Constants
     x_data = []
     y_data = []
+    background = []
     y_uncertainties = []
 
     # Get light curve data
@@ -70,15 +76,22 @@ def light_curve_plot(min_value: int, data_paths: str, gti_numbers: list[int]) ->
 
         x_data.append(data[0])
         y_data.append(data[1])
-        y_uncertainties.append(data[2])
+        background.append(data[2])
+        y_uncertainties.append(data[3])
+
+    kwargs = {
+        'title': 'Light Curve',
+        'xaxis_title': r'$\text{Relative Time}\ (s)$',
+        'yaxis_title': r'$\text{Photons}\ (s^{-1} det^{-1})$',
+        'showlegend': True,
+    }
 
     # Plot light curve
     return data_plot(
-        'Light Curve',
-        r'$\text{Relative Time}\ (s)$',
-        r'$\text{Photons}\ (s^{-1} det^{-1})$',
         gti_numbers,
         x_data,
         y_data,
-        y_uncertainties,
+        kwargs,
+        background=background,
+        y_uncertainties=y_uncertainties,
     )
