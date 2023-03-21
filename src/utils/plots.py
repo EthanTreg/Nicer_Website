@@ -12,7 +12,9 @@ def data_plot(
         x_data_list: list[ndarray],
         y_data_list: list[ndarray],
         kwargs: dict,
+        plot_type: str = 'markers',
         background: list[ndarray] = None,
+        x_error: list[ndarray] = None,
         y_uncertainties: list[ndarray] = None) -> str:
     """
     Plots data with uncertainties if provided
@@ -27,8 +29,14 @@ def data_plot(
         List of y-axis data
     kwargs : dictionary
         Plot layout parameters
+    plot_type : string, default = markers
+        Plot marker type, can be markers, lines, or lines+markers
+    background : list[ndarray], default = None
+        List of background data
+    x_error : list[ndarray], default = None
+        List of x error bars
     y_uncertainties : list[ndarray]
-        List of y-axis uncertainty
+        List of y-axis uncertainties
 
     Returns
     -------
@@ -44,14 +52,22 @@ def data_plot(
         background = [None] * len(x_data_list)
 
     # Plot each GTI
-    for number, x_data, y_data, bg, y_uncertainty, color in zip(
+    for number, x_data, y_data, bg, x_error, y_uncertainty, color in zip(
         gti_numbers,
         x_data_list,
         y_data_list,
         background,
+        x_error,
         y_uncertainties,
         qualitative.Plotly,
     ):
+        if x_error is not None:
+            x_error = {
+                'type': 'data',
+                'array': x_error,
+                'visible': True,
+            }
+
         if y_uncertainty is not None:
             y_uncertainty = {
                 'type': 'data',
@@ -63,8 +79,9 @@ def data_plot(
         fig.add_trace(go.Scatter(
             x=x_data,
             y=y_data,
+            error_x=x_error,
             error_y=y_uncertainty,
-            mode='markers',
+            mode=plot_type,
             name=f'GTI{number}',
             opacity=0.8,
             line={'color': color},

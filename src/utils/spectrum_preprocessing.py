@@ -31,7 +31,7 @@ def channel_kev(channel: ndarray) -> ndarray:
 def spectrum_data(
         min_value: int,
         data_path: str,
-        cut_off: list = None) -> tuple[ndarray, ndarray, ndarray, ndarray]:
+        cut_off: list = None) -> tuple[ndarray, ndarray, ndarray, ndarray, ndarray]:
     """
     Fetches binned data from spectrum
 
@@ -48,8 +48,8 @@ def spectrum_data(
 
     Returns
     -------
-    tuple[ndarray, ndarray, ndarray, integer]
-        Binned energies, binned spectrum data, binned background, & binned uncertainties
+    tuple[ndarray, ndarray, ndarray, ndarray, ndarray]
+        Binned energies, binned spectrum data, binned background, x error, & binned uncertainties
     """
     if not cut_off:
         cut_off = [0.3, 10]
@@ -72,10 +72,9 @@ def spectrum_data(
     groupings = spectrum['GROUPING']
     bins = np.argwhere(groupings == 1)[:, 0]
 
-
     # Bin data either by groupings or by minimum value
     if min_value:
-        (y_bin, bg_bin, x_bin), uncertainty = min_bin(
+        (y_bin, bg_bin, x_bin), x_width, uncertainty = min_bin(
             min_value,
             np.stack((spectrum['COUNTS'], background['COUNTS'], x_data)),
         )
@@ -84,12 +83,15 @@ def spectrum_data(
             bins,
             np.stack((spectrum['COUNTS'], background['COUNTS'], x_data)),
         )
+        bins = np.append(bins, len(groupings))
+        x_width = np.diff(bins)
 
     # Normalization
     y_bin = (
         y_bin / spectrum_info['EXPOSURE'] - bg_bin / bg_info['EXPOSURE']
     ) / (detectors * energy)
     bg_bin /= bg_info['EXPOSURE'] * detectors * energy
+    x_error = x_width * energy / 2
     uncertainty /= spectrum_info['EXPOSURE'] * detectors * energy
 
     # Energy range cut-off
@@ -97,9 +99,10 @@ def spectrum_data(
     x_bin = np.delete(x_bin, cut_indices)
     y_bin = np.delete(y_bin, cut_indices)
     bg_bin = np.delete(bg_bin, cut_indices)
+    x_error = np.delete(x_error, cut_indices)
     uncertainty = np.delete(uncertainty, cut_indices, axis=1)
 
-    return x_bin, y_bin, bg_bin, uncertainty[0]
+    return x_bin, y_bin, bg_bin, x_error, uncertainty[0]
 
 
 def spectrum_plot(
@@ -130,6 +133,7 @@ def spectrum_plot(
     x_data = []
     y_data = []
     background = []
+    x_error = []
     y_uncertainties = []
 
     # Get spectrum data
@@ -139,7 +143,8 @@ def spectrum_plot(
         x_data.append(data[0])
         y_data.append(data[1])
         background.append(data[2])
-        y_uncertainties.append(data[3])
+        x_error.append(data[3])
+        y_uncertainties.append(data[4])
 
     kwargs = {
         'title' : 'Spectrum',
@@ -157,5 +162,6 @@ def spectrum_plot(
         y_data,
         kwargs,
         background=background,
+        x_error=x_error,
         y_uncertainties=y_uncertainties,
     )

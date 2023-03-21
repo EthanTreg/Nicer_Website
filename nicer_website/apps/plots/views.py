@@ -15,10 +15,8 @@ from src.utils.light_curve_preprocessing import light_curve_plot
 
 # Log axis
 # Get feedback
-# Bin width error bars
 # Info field (avg count)
 # Ability to choose grouping binning
-# Photos
 
 # Global variable
 plots = {

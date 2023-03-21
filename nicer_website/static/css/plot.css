@@ -24,10 +24,29 @@ input {
     padding: 6px;
 }
 
-input[type="text"] {
-    margin-bottom: 3px;
-    transition-delay: 200ms;
-    width: 100%;
+input[type="checkbox"] {
+    appearance: none;
+    border: 1px solid var(--border-color);
+    position: relative;
+    height: 1em;
+    width: 1em;
+}
+
+input[type="checkbox"]:before {
+    background-color: #333;
+    content: "";
+    height: 0.6em;
+    left: 50%;
+    opacity: 0;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    transition: 0.1s;
+    width: 0.6em;
+}
+
+input[type="checkbox"]:checked:before {
+    opacity: 1;
 }
 
 input[type="range"] {
@@ -35,7 +54,13 @@ input[type="range"] {
     width: 100%;
 }
 
-input:focus {
+input[type="text"] {
+    margin-bottom: 3px;
+    transition-delay: 200ms;
+    width: 100%;
+}
+
+input[type="text"]:focus {
     border-bottom: 3px solid var(--border-color);
     margin-bottom: 0px;
     outline: none;
@@ -61,6 +86,12 @@ td {
 
 tr:nth-child(even) {
     background-color: var(--border-color);
+}
+
+.checkboxes {
+    align-items: center;
+    display: flex;
+    justify-content: space-evenly;
 }
 
 .column {

@@ -19,7 +19,7 @@
 {% block title %}Plot{% endblock %}
 
 {% block content %}
-<h1>Spectrum Plot</h1>
+<h1>Interactive Plots</h1>
 
 <form id="plot-graph" method="post">
     {% csrf_token %}
@@ -44,7 +44,7 @@
             </div>
         </div>
 
-        <div id="options" class="column">
+        <div id="options" class="column checkboxes">
             <input id="spectrum-check" type="checkbox" name="spectrum" value=".jsgrp" {% if spectrum %}checked{% endif %}>
             <label for="spectrum-check">Spectrum</label>
             <input id="light-curve-check" type="checkbox" name="light-curve" value=".lc.gz" {% if lightCurve %}checked{% endif %}>

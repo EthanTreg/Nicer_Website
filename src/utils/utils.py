@@ -2,9 +2,10 @@
 Misc functions used elsewhere
 """
 import numpy as np
+from numpy import ndarray
 
 
-def min_bin(min_value: int, data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def min_bin(min_value: int, data: ndarray) -> tuple[ndarray, ndarray, ndarray]:
     """
     Ensures each bin has a minimum value.
 
@@ -18,13 +19,13 @@ def min_bin(min_value: int, data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
     Returns
     -------
-    tuple[ndarray, ndarray]
-        Binned data and Poisson uncertainty
+    tuple[ndarray, ndarray, ndarray]
+        Binned data, bin width, and Poisson uncertainty
     """
     # Constants
     i = 0
     bin_width = 1
-    uncertainty = []
+    bins = np.array(())
 
     # Swaps axes for easier indexing and ensures data is 2D
     if len(data.shape) > 1:
@@ -45,19 +46,21 @@ def min_bin(min_value: int, data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         else:
             uncertainty = np.vstack((uncertainty, np.sqrt(np.maximum(data[i], 1)) / bin_width))
             data[i] /= bin_width
+            bins = np.append(bins, bin_width)
             bin_width = 1
             i += 1
 
     # Deal with last bin and if it is less than the minimum value, merge with the previous bin
     if data[-1, 0] < min_value:
-        bin_width += 1
-        data[-2] += data[-1]
+        data[-2] = data[-2] * bins[-1] + data[-1]
         data = np.delete(data, -1, axis=0)
-        uncertainty[-1] = np.sqrt(np.maximum(data[-1], 1)) / bin_width
+        bins[-1] += bin_width
+        uncertainty[-1] = np.sqrt(np.maximum(data[-1], 1)) / bins[-1]
+        data[-1] /= bins[-1]
     else:
-        uncertainty = np.vstack((uncertainty, np.sqrt(np.maximum(data[-1], 1)) / bin_width))
-
-    data[-1] /= bin_width
+        bins = np.append(bins, bin_width)
+        uncertainty = np.vstack((uncertainty, np.sqrt(np.maximum(data[-1], 1)) / bins[-1]))
+        data[-1] /= bins[-1]
 
     # Revert shape to input
     if data.shape[1] != 1:
@@ -67,10 +70,10 @@ def min_bin(min_value: int, data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         data = data[:, 0]
         uncertainty = uncertainty[:, 0]
 
-    return data, np.array(uncertainty)
+    return data, bins, uncertainty
 
 
-def binning(bins: np.ndarray, data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def binning(bins: ndarray, data: ndarray) -> tuple[ndarray, ndarray]:
     """
     Bin data into bins.
 
