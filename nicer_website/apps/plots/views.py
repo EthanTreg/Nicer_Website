@@ -155,7 +155,7 @@ def plot_data(request: HttpRequest) -> JsonResponse:
         for file_name in file_names[indices]:
             file_name = dir_path + file_name
             info = np.char.replace(np.loadtxt(file_name, dtype=str, unpack=True), "'", '')
-            infos.append(dict(zip(*info)) | {'GTI': re.search('GTI\d+', file_name).group(0)})
+            infos.append(dict(zip(*info)) | {'GTI': re.search(r'GTI\d+', file_name).group(0)})
 
         # Plot depending on the data type
         for plot_type in plots.values():

@@ -1,5 +1,6 @@
 [MASTER]
 ignore-paths=.*/migrations,(.)*_test\.py,test_(.)*\.py,test.py,test_.*?py
+ignore-patterns=.*test.*
 
 [BASIC]
 good-names=f, i, j, k, y

@@ -58,6 +58,7 @@ function addObservation(obsID) {
 
 /**
  * Searches for observation IDs that match the search field.
+ *
  * Creates buttons for each observation ID that matches the search field.
  * @param {String} obsID Partial or complete observation ID
  */
@@ -71,7 +72,14 @@ function fetchOptions(obsID) {
     });
 }
 
+/**
+ * Displays information for each GTI in a dropdown table.
+ * @param {Array.<Object>} info List of information for all GTI
+ * @returns {HTMLDivElement}
+ * Container containing the expandable table of GTIs
+ */
 function displayInfo(info) {
+  // Information types to display in the table
   const TABLE_INFO = {
     headers: [
       'GTI',
@@ -80,10 +88,10 @@ function displayInfo(info) {
       String.raw`RA \((^\circ)\)`,
       String.raw`DEC \((^\circ)\)`,
       String.raw`Exposure Time \((s)\)`,
-      'Detectors Count',
-      String.raw`Under Shoot Rate \((s^{-1})\)`,
-      String.raw`Over Shoot Rate \((s^{-1})\)`,
-      'COR SAX',
+      'Detectors',
+      String.raw`Undershoot Rate \((s^{-1})\)`,
+      String.raw`Overshoot Rate \((s^{-1})\)`,
+      String.raw`COR SAX \((GeV\ c^{-1})\)`,
     ],
     keys: [
       'GTI',
@@ -97,24 +105,27 @@ function displayInfo(info) {
       'OSHOOT_NET_RATE',
       'COR_SAX',
     ],
-    precision: [null, null, 3, 2, 2, 2, 0, 2, 4, 3],
+    precision: [null, null, 5, 2, 2, 2, 0, 2, 4, 3],
   };
+
+  // Constants
   const CONTAINER = $('<div>');
   const TABLE = $('<table>');
   const HEADER_ROW = $('<tr>');
-  const BUTTON = $(
-    '<button type="button">&#x2304</button>',
-  );
+  const BUTTON = $('<button type="button">&#x2304</button>');
 
+  // Add headers to the table
   for (const HEADER of TABLE_INFO.headers) {
     HEADER_ROW.append($(`<th>${HEADER}</th>`));
   }
 
   TABLE.append(HEADER_ROW);
 
+  // Add each row of data to the table
   for (const [J, GTI] of info.entries()) {
     const DATA_ROW = $('<tr></tr>');
 
+    // Add each table cell to the row
     for (let i = 0; i < TABLE_INFO.headers.length; i++) {
       let data = GTI[TABLE_INFO.keys[i]];
 
@@ -125,6 +136,7 @@ function displayInfo(info) {
       DATA_ROW.append($(`<td>${data}</td>`));
     }
 
+    // Hide all but the first row
     if (J !== 0) {
       DATA_ROW.addClass('hide');
     }
@@ -135,11 +147,10 @@ function displayInfo(info) {
   CONTAINER.append(TABLE);
   CONTAINER.append(BUTTON);
 
+  // Add button to expand the table
   BUTTON.click(() => {
     TABLE.children().slice(2).toggleClass('hide');
-    BUTTON.html(
-      /\u2304/.test(BUTTON.html()) ? '&#x2303' : '&#x2304',
-    );
+    BUTTON.html(/\u2304/.test(BUTTON.html()) ? '&#x2303' : '&#x2304');
   });
 
   return CONTAINER;
@@ -149,7 +160,7 @@ function displayInfo(info) {
  * Fetches and plots GTIs from the search field for the given plot type.
  * @param {String} obsID Observation ID
  */
-function fetchGTI(obsID) {
+function fetchGTIPlot(obsID) {
   $('.fetch-gti').submit(function (e) {
     // Constants
     const REGEX = /"title":\{"text":"(.+?)"\}/;
@@ -233,7 +244,7 @@ function fetchGraphPlots() {
   $('#plot-graph').submit(function (e) {
     // Constants
     const SERIALIZED_DATA = $(this).serialize();
-    const REGEX = /"title":\{"text":"(.+?)"\}/;
+    const TYPE_REGEX = /"title":\{"text":"(.+?)"\}/;
 
     // Prevents reloading the page
     e.preventDefault();
@@ -255,15 +266,15 @@ function fetchGraphPlots() {
         // Displays each selected plot type
         for (let i = 0; i < response.plotDivs.length; i++) {
           // Gets information on the plot type
-          const NAME = REGEX.exec(response.plotDivs[i])[1]
+          const TYPE = TYPE_REGEX.exec(response.plotDivs[i])[1]
             .toLowerCase()
             .replaceAll(' ', '_');
-          const PLOT_DIV = $(response.plotDivs[i]).attr('id', NAME);
+          const PLOT_DIV = $(response.plotDivs[i]).attr('id', TYPE);
 
           // Displays the plot and GTI selection field
           $('#plots').append(PLOT_DIV);
-          $('#plots').append(GTISelection(response.maxGTI[i], NAME));
-          fetchGTI(response.obsID);
+          $('#plots').append(GTISelection(response.maxGTI[i], TYPE));
+          fetchGTIPlot(response.obsID, TYPE);
         }
       },
     });

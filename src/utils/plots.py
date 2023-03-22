@@ -13,7 +13,8 @@ def data_plot(
         y_data_list: list[ndarray],
         kwargs: dict,
         plot_type: str = 'markers',
-        background: list[ndarray] = None,
+        x_background_list: list[ndarray] = None,
+        background_list: list[ndarray] = None,
         x_error: list[ndarray] = None,
         y_uncertainties: list[ndarray] = None) -> str:
     """
@@ -31,6 +32,8 @@ def data_plot(
         Plot layout parameters
     plot_type : string, default = markers
         Plot marker type, can be markers, lines, or lines+markers
+    x_background : list[ndarray], default = None
+        List of corresponding background energies, if none, x_data_list will be used
     background : list[ndarray], default = None
         List of background data
     x_error : list[ndarray], default = None
@@ -48,15 +51,19 @@ def data_plot(
     if not y_uncertainties:
         y_uncertainties = [None] * len(x_data_list)
 
-    if not background:
-        background = [None] * len(x_data_list)
+    if not x_background_list:
+        x_background_list = x_data_list
+
+    if not background_list:
+        background_list = [None] * len(x_data_list)
 
     # Plot each GTI
-    for number, x_data, y_data, bg, x_error, y_uncertainty, color in zip(
+    for number, x_data, y_data, x_background, background, x_error, y_uncertainty, color in zip(
         gti_numbers,
         x_data_list,
         y_data_list,
-        background,
+        x_background_list,
+        background_list,
         x_error,
         y_uncertainties,
         qualitative.Plotly,
@@ -89,10 +96,10 @@ def data_plot(
         ))
 
         # Plot background if provided
-        if bg is not None:
+        if background is not None:
             fig.add_trace(go.Scatter(
-                x=x_data,
-                y=bg,
+                x=x_background,
+                y=background,
                 mode='lines',
                 name=f'GTI{number} BG',
                 opacity=0.8,
@@ -100,7 +107,8 @@ def data_plot(
                 legendgroup=number,
             ))
 
-    fig.update_layout(legend={'groupclick': 'toggleitem'}, **kwargs)
+    # fig.update_layout(legend={'groupclick': 'toggleitem'}, **kwargs)
+    fig.update_layout(**kwargs)
 
     return plot(
         fig,
