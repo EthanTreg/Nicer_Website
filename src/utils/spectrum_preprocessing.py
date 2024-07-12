@@ -32,17 +32,24 @@ def channel_kev(channel: ndarray) -> ndarray:
 def spectrum_data(
         min_value: int,
         data_path: str,
-        cut_off: list = None) -> tuple[ndarray, ndarray, ndarray, ndarray, ndarray, ndarray]:
+        cut_off: tuple[float, float] | None = None) -> tuple[
+    ndarray,
+    ndarray,
+    ndarray,
+    ndarray,
+    ndarray,
+    ndarray,
+]:
     """
     Fetches and corrects binned data from spectrum
 
     Parameters
     ----------
-    min_value : integer
+    min_value : int
         Minimum value for each bin, if None, groupings will be used
-    data_path : string
+    data_path : str
         File path to the spectrum
-    cut_off : list, default = [0.3, 10]
+    cut_off : tuple[float, float], default = (0.3, 10)
         Range of accepted data in keV
 
     Returns
@@ -50,8 +57,30 @@ def spectrum_data(
     tuple[ndarray, ndarray, ndarray, ndarray, ndarray, ndarray]
         Binned energies, spectrum data, background energies, background, x error, & uncertainties
     """
+    detectors: int
+    energy: float
+    response: str
+    bg_interp_indices: tuple[ndarray, ndarray]
+    bins: ndarray
+    x_bin: ndarray
+    y_bin: ndarray
+    bg_bin: ndarray
+    x_data: ndarray
+    x_width: ndarray
+    x_error: ndarray
+    min_bins: ndarray
+    bg_x_bin: ndarray
+    groupings: ndarray
+    bg_bin_cut: ndarray
+    uncertainty: ndarray
+    cut_indices: ndarray
+    background: pd.DataFrame
+    bg_info: fits.Header
+    spectrum_info: fits.Header
+    spectrum: fits.FITS_rec
+
     if not cut_off:
-        cut_off = [0.3, 12]
+        cut_off = (0.3, 12)
 
     # Fetch spectrum & background fits files
     with fits.open(data_path) as file:
@@ -69,23 +98,26 @@ def spectrum_data(
 
     # Pre binned data
     x_data = channel_kev(spectrum['CHANNEL'])
-    energy = x_data[1] - x_data[0]
+    energy = float(x_data[1] - x_data[0])
     groupings = spectrum['GROUPING']
-    bins = np.argwhere(groupings == 1)[:, 0]
+    bins = np.argwhere(groupings == 1).flatten()
     bins = np.append(bins, len(groupings))
 
-    # Bin data either by groupings or by minimum value
+    # Bin data based on groupings
+    (y_bin, bg_bin, x_bin), _, uncertainty = binning(
+        bins,
+        np.stack((spectrum['COUNTS'], background['COUNTS'], x_data)),
+    )
+    x_width = np.diff(bins)
+
+    # If data should be binned to maintain minimum counts per bin
     if min_value:
-        (y_bin, bg_bin, x_bin), x_width, uncertainty = min_bin(
-            min_value,
-            np.stack((spectrum['COUNTS'], background['COUNTS'], x_data)),
+        min_bins = min_bin(min_value, y_bin * x_width)
+        (y_bin, bg_bin, x_bin), x_width, uncertainty = binning(
+            min_bins,
+            np.stack((y_bin, bg_bin, x_bin)),
+            weights=x_width,
         )
-    else:
-        (y_bin, bg_bin, x_bin), uncertainty = binning(
-            bins,
-            np.stack((spectrum['COUNTS'], background['COUNTS'], x_data)),
-        )
-        x_width = np.diff(bins)
 
     # Normalization
     y_bin = (
@@ -97,10 +129,10 @@ def spectrum_data(
 
     # Energy range cut-off
     cut_indices = np.argwhere((x_bin < cut_off[0]) | (x_bin > cut_off[1]))
-    bg_interp_indices = [
+    bg_interp_indices = (
         np.argwhere(x_bin < cut_off[0]).flatten()[-1:] + 1 or np.array([0]),
         np.argwhere(x_bin > cut_off[1]).flatten()[0:1] - 1 or np.array([-1]),
-    ]
+    )
 
     # Interpolate background data to the edge of the first and last bin within the energy range
     bg_bin_cut = np.delete(bg_bin, cut_indices)
@@ -134,27 +166,26 @@ def spectrum_plot(
 
     Parameters
     ----------
-    min_value : integer
+    min_value : int
         Minimum value for each bin, if None, groupings will be used
-    data_paths : list[string]
+    data_paths : list[str]
         File paths to the spectra
-    gti_numbers: list[integer]
+    gti_numbers: list[int]
         List of GTI numbers
     cut_off : list, default = [0.3, 10]
         Range of accepted data in keV
 
     Returns
     -------
-    string
+    str
         Spectrum plot as HTML
     """
-    # Constants
-    x_data = []
-    y_data = []
-    x_background = []
-    background = []
-    x_error = []
-    y_uncertainties = []
+    x_data: list[ndarray] = []
+    y_data: list[ndarray] = []
+    x_error: list[ndarray] = []
+    background: list[ndarray] = []
+    x_background: list[ndarray] = []
+    y_uncertainties: list[ndarray] = []
 
     # Get spectrum data
     for data_path in data_paths:
@@ -168,23 +199,19 @@ def spectrum_plot(
         ], spectrum_data(min_value, data_path, cut_off=cut_off)):
             data_list.append(data)
 
-    kwargs = {
-        'title' : 'Spectrum',
-        'xaxis_title' : r'$\text{Energy}\ (keV)$',
-        'xaxis_type' : 'log',
-        'yaxis_title' : r'$\text{Photons}\ (keV^{-1} s^{-1} det^{-1})$',
-        'yaxis_type' : 'log',
-        'showlegend': True,
-    }
-
     # Plot spectrum
     return data_plot(
         gti_numbers,
         x_data,
         y_data,
-        kwargs,
         x_background_list=x_background,
         background_list=background,
-        x_error=x_error,
+        x_errors=x_error,
         y_uncertainties=y_uncertainties,
+        title='Spectrum',
+        xaxis_title= r'$\text{Energy}\ (keV)$',
+        yaxis_title=r'$\text{Photons}\ (keV^{-1} s^{-1} det^{-1})$',
+        xaxis_type='log',
+        yaxis_type='log',
+        showlegend=True,
     )

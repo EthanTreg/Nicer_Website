@@ -1,31 +1,6 @@
-/* global PLOT_GRAPH_URL PLOT_GTI_URL MathJax */
+/* global PLOT_GRAPH_URL PLOT_GTI_URL MathJax quality */
 
-/**
- * Generates a grid layout with a column for each element input.
- *
- * Supports jQuery.
- * @param {Array.<HTMLElement>} elements
- * List of HTML elements to spread over a column layout
- * @returns {HTMLDivElement}
- * Grid layout as an HTML div element
- * containing columns with each inputted element
- */
-function columnLayout(elements) {
-  const ROW = document.createElement('div');
-
-  ROW.classList.add('row');
-
-  // For each element, create a column containing the element
-  for (const ELEMENT of elements) {
-    const COLUMN = document.createElement('div');
-
-    COLUMN.classList.add('column');
-    $(COLUMN).append(ELEMENT);
-    $(ROW).append(COLUMN);
-  }
-
-  return ROW;
-}
+import { columnLayout, dropdowns } from '../utils/utils.js';
 
 /**
  * Updates the quality setting when the user activates a quality button.
@@ -109,51 +84,51 @@ function displayInfo(info) {
   };
 
   // Constants
-  const CONTAINER = $('<div>');
-  const TABLE = $('<table>');
-  const HEADER_ROW = $('<tr>');
-  const BUTTON = $('<button type="button">&#x2304</button>');
+  const $CONTAINER = $('<div>');
+  const $TABLE = $('<table>');
+  const $HEADER_ROW = $('<tr>');
+  const $BUTTON = $('<button type="button">&#x2304</button>');
 
   // Add headers to the table
   for (const HEADER of TABLE_INFO.headers) {
-    HEADER_ROW.append($(`<th>${HEADER}</th>`));
+    $HEADER_ROW.append($(`<th>${HEADER}</th>`));
   }
 
-  TABLE.append(HEADER_ROW);
+  $TABLE.append($HEADER_ROW);
 
   // Add each row of data to the table
   for (const [J, GTI] of info.entries()) {
-    const DATA_ROW = $('<tr></tr>');
+    const $DATA_ROW = $('<tr>');
 
     // Add each table cell to the row
     for (let i = 0; i < TABLE_INFO.headers.length; i++) {
-      let data = GTI[TABLE_INFO.keys[i]];
+      let data = GTI[TABLE_INFO.keys[i]].replace('_', ' ');
 
       if (TABLE_INFO.precision[i] != null) {
         data = (+data).toFixed(TABLE_INFO.precision[i]);
       }
 
-      DATA_ROW.append($(`<td>${data}</td>`));
+      $DATA_ROW.append($(`<td>${data}</td>`));
     }
 
     // Hide all but the first row
     if (J !== 0) {
-      DATA_ROW.addClass('hide');
+      $DATA_ROW.addClass('hide');
     }
 
-    TABLE.append(DATA_ROW);
+    $TABLE.append($DATA_ROW);
   }
 
-  CONTAINER.append(TABLE);
-  CONTAINER.append(BUTTON);
+  $CONTAINER.append($TABLE);
+  $CONTAINER.append($BUTTON);
 
   // Add button to expand the table
-  BUTTON.click(() => {
-    TABLE.children().slice(2).toggleClass('hide');
-    BUTTON.html(/\u2304/.test(BUTTON.html()) ? '&#x2303' : '&#x2304');
+  $BUTTON.click(() => {
+    $TABLE.children().slice(2).toggleClass('hide');
+    $BUTTON.html(/\u2304/.test($BUTTON.html()) ? '&#x2303' : '&#x2304');
   });
 
-  return CONTAINER;
+  return $CONTAINER;
 }
 
 /**
@@ -186,10 +161,10 @@ function fetchGTIPlot(obsID) {
         const NAME = REGEX.exec(response.plotDivs[0])[1]
           .toLowerCase()
           .replaceAll(' ', '_');
-        const PLOT_DIV = $(response.plotDivs[0]).attr('id', NAME);
+        const $PLOT_DIV = $(response.plotDivs[0]).attr('id', NAME);
 
         // Updates the plot with the GTIs
-        $(`#${NAME}`).replaceWith(PLOT_DIV);
+        $(`#${NAME}`).replaceWith($PLOT_DIV);
       },
     });
   });
@@ -206,34 +181,34 @@ function fetchGTIPlot(obsID) {
  */
 function GTISelection(maxGTI, plotType) {
   // Constants
-  const FORM = $('<form class="fetch-gti">');
-  const TYPE = $(`<input name="plot_type" type="hidden" value="${plotType}">`);
-  const SEARCH = $(
+  const $FORM = $('<form class="fetch-gti">');
+  const $TYPE = $(`<input name="plot_type" type="hidden" value="${plotType}">`);
+  const $SEARCH = $(
     '<input name="gti-search" type="text" ' +
       `placeholder="GTI numbers (,) and/or range (-) between 0 and ${
         maxGTI - 1
       }">`,
   );
-  const MIN_SLIDER = $(
+  const $MIN_SLIDER = $(
     `<input id="${plotType}-min-slider" name="min_value" ` +
-      'type="range" min="1" max="200" value="100">',
+      'type="range" min="1" max="200" value="1">',
   );
-  const MIN_VALUE = $(`<p id="${plotType}-min-value">Value: 100 counts</p>`);
-  const SUBMIT = $('<button type="submit">Submit</button>');
+  const $MIN_VALUE = $(`<p id="${plotType}-min-value">Value: 1 counts</p>`);
+  const $SUBMIT = $('<button type="submit">Submit</button>');
 
   // Adds elements to the form
-  FORM.append(TYPE);
-  FORM.append(columnLayout([SEARCH, SUBMIT]));
-  FORM.append(columnLayout([MIN_SLIDER, MIN_VALUE]));
+  $FORM.append($TYPE);
+  $FORM.append(columnLayout([$SEARCH, $SUBMIT]));
+  $FORM.append(columnLayout([$MIN_SLIDER, $MIN_VALUE]));
 
   // Update slider value on change
-  MIN_SLIDER.on('input', function () {
+  $MIN_SLIDER.on('input', function () {
     $(`#${plotType}-min-value`).html(
       `Value: ${$(`#${plotType}-min-slider`).val()} counts`,
     );
   });
 
-  return FORM;
+  return $FORM;
 }
 
 /**
@@ -249,7 +224,6 @@ function fetchGraphPlots() {
     // Prevents reloading the page
     e.preventDefault();
 
-    // Sends an asynchronous request to generate a plot with multiple GTIs
     $.ajax({
       type: 'POST',
       url: PLOT_GRAPH_URL,
@@ -279,39 +253,6 @@ function fetchGraphPlots() {
       },
     });
   });
-}
-
-/**
- * Shows or hides dropdown suggestions depending if the input field is in focus.
- * @param {HTMLInputElement} field Input element which has dropdown suggestions
- * @param {HTMLDivElement} content
- * Div element containing the dropdown suggestions
- */
-function dropdownFocus(field, content) {
-  field.addEventListener('blur', () => {
-    setTimeout(() => {
-      content.classList.remove('show');
-    }, 200);
-  });
-
-  field.addEventListener('focus', () => {
-    content.classList.add('show');
-  });
-}
-
-/**
- * Adds event listeners for all search fields with dropdown suggestions.
- */
-function dropdowns() {
-  const DROPDOWNS = document.getElementsByClassName('dropdown');
-
-  for (const DROPDOWN of DROPDOWNS) {
-    const DROPDOWN_FIELD = DROPDOWN.getElementsByClassName('dropdown-field')[0];
-    const DROPDOWN_CONTENT =
-      DROPDOWN.getElementsByClassName('dropdown-content')[0];
-
-    dropdownFocus(DROPDOWN_FIELD, DROPDOWN_CONTENT);
-  }
 }
 
 // When the page loads add event listeners for different input fields

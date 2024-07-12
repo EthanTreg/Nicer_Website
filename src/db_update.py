@@ -114,16 +114,21 @@ def main():
     """
     count = 0
     data = []
+    os.chdir('../')
 
     # Get data directory location from config.txt
     with open('config.txt', mode='r', encoding='utf-8') as config:
-        data_dir = '../' + json.load(config)['data_dir']
+        data_dir = json.load(config)['data_dir']
 
     # Calculate the total number of folders and files
     try:
         total = linux_count(data_dir)
     except (subprocess.CalledProcessError, FileNotFoundError):
         total = universal_count(data_dir)
+
+    if not total:
+        raise ValueError(f'No files or folders found, check parent directory is correct: '
+                         f'{data_dir}')
 
     print(f'Total number of files and folders: {total}')
 

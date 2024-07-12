@@ -29,7 +29,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['127.0.0.1', '192.168.1.32', 'localhost']
 
 
 # Application definition
@@ -128,7 +128,6 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'nicer_website/static'),
     ('nicer_data', DATA_DIR),
-    ('node_modules', os.path.join(BASE_DIR, 'node_modules/')),
 ]
 
 # Default primary key field type

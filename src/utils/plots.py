@@ -1,6 +1,8 @@
 """
 Functions to plot graphs
 """
+from typing import Any
+
 import plotly.graph_objs as go
 from numpy import ndarray
 from plotly.offline import plot
@@ -11,42 +13,50 @@ def data_plot(
         gti_numbers: list[int],
         x_data_list: list[ndarray],
         y_data_list: list[ndarray],
-        kwargs: dict,
         plot_type: str = 'markers',
-        x_background_list: list[ndarray] = None,
-        background_list: list[ndarray] = None,
-        x_error: list[ndarray] = None,
-        y_uncertainties: list[ndarray] = None) -> str:
+        x_background_list: list[ndarray] | None = None,
+        background_list: list[ndarray] | None = None,
+        x_errors: list[ndarray] | None = None,
+        y_uncertainties: list[ndarray] | None = None,
+        **kwargs: Any) -> str:
     """
     Plots data with uncertainties if provided
 
     Parameters
     ----------
-    gti_numbers : list[integer]
+    gti_numbers : list[int]
         List of GTI numbers
     x_data_list : list[ndarray]
         List of x-axis data
     y_data_list : list[ndarray]
         List of y-axis data
-    kwargs : dictionary
-        Plot layout parameters
-    plot_type : string, default = markers
+    plot_type : str, default = markers
         Plot marker type, can be markers, lines, or lines+markers
-    x_background : list[ndarray], default = None
+    x_background_list : list[ndarray], default = None
         List of corresponding background energies, if none, x_data_list will be used
-    background : list[ndarray], default = None
+    background_list : list[ndarray], default = None
         List of background data
-    x_error : list[ndarray], default = None
+    x_errors : list[ndarray], default = None
         List of x error bars
     y_uncertainties : list[ndarray]
         List of y-axis uncertainties
 
+    **kwargs
+        Parameters to pass to Plotly layout
+
     Returns
     -------
-    string
+    str
         Plot as HTML
     """
-    fig = go.Figure()
+    number: int
+    color: str
+    x_error: dict[str, bool | str | ndarray] | ndarray
+    y_uncertainty: dict[str, bool | str | ndarray] | ndarray
+    x_data: ndarray
+    y_data: ndarray
+    x_background: ndarray
+    fig: go.Figure = go.Figure()
 
     if not y_uncertainties:
         y_uncertainties = [None] * len(x_data_list)
@@ -64,7 +74,7 @@ def data_plot(
         y_data_list,
         x_background_list,
         background_list,
-        x_error,
+        x_errors,
         y_uncertainties,
         qualitative.Plotly,
     ):

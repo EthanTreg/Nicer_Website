@@ -10,9 +10,10 @@
 <script>
     const PLOT_GRAPH_URL = "{% url 'plots:plot_data' %}";
     const PLOT_GTI_URL = "{% url 'plots:plot_gti' %}";
+    let quality = "{{ quality }}";
 </script>
 
-<script src="{% static '/js/plot.js' %}"></script>
+<script src="{% static '/js/plots/plot.js' %}" type="module"></script>
 
 {% endblock %}
 

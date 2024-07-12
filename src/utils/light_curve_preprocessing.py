@@ -4,21 +4,21 @@ Utility to correct light curve data
 import numpy as np
 from numpy import ndarray
 
-from src.utils.utils import min_bin
+from src.utils.utils import min_bin, binning
 from src.utils.plots import data_plot
 
 
 def light_curve_data(
-    min_value: int,
-    data_path: str) -> tuple[ndarray, ndarray, ndarray, ndarray, ndarray, ndarray]:
+        min_value: int,
+        data_path: str) -> tuple[ndarray, ndarray, ndarray, ndarray, ndarray, ndarray]:
     """
     Fetches and corrects binned light curve data
 
     Parameters
     ----------
-    min_value : integer
+    min_value : int
         Minimum value used for binning
-    data_path : string
+    data_path : str
         Path to the light curve
 
     Returns
@@ -26,18 +26,33 @@ def light_curve_data(
     tuple[ndarray, ndarray, ndarray, ndarray, ndarray, ndarray]
         Binned relative time, light curve, background time, background, x width, and uncertainty
     """
+    detectors: int | ndarray
+    time_diff: float
+    time: ndarray
+    x_bin: ndarray
+    y_bin: ndarray
+    bg_bin: ndarray
+    counts: ndarray
+    x_width: ndarray
+    x_error: ndarray
+    bg_x_bin: ndarray
+    min_bins: ndarray
+    background: ndarray
+    uncertainty: ndarray
+
     time, counts, detectors = np.loadtxt(data_path, usecols=[0, 2, 3], unpack=True)
     background = np.loadtxt(data_path.replace('.lc.gz', '.bg-lc.gz'), usecols=2)
 
     # Constants
     detectors = detectors[0]
-    time_diff = time[1] - time[0]
+    time_diff = float(time[1] - time[0])
     counts *= time_diff
 
     # Bin data
-    (y_bin, bg_bin, x_bin), x_width, uncertainties = min_bin(
-        min_value,
-        np.stack((counts, background, time)),
+    min_bins = min_bin(min_value, counts)
+    (y_bin, bg_bin, x_bin), x_width, uncertainty = binning(
+        min_bins,
+        np.stack((counts[:len(background)], background[:len(time)], time[:len(background)])),
     )
 
     # Normalise data
@@ -45,7 +60,7 @@ def light_curve_data(
     bg_bin /= detectors
     bg_bin = np.insert(bg_bin, [0, -1], [bg_bin[0], bg_bin[-1]])
     x_error = x_width * time_diff / 2
-    uncertainties /= detectors * time_diff
+    uncertainty /= detectors * time_diff
     bg_x_bin = x_bin.copy()
     bg_x_bin = np.insert(
         bg_x_bin,
@@ -53,34 +68,33 @@ def light_curve_data(
         [x_bin[0] - x_error[0], x_bin[-1] + x_error[-1]],
     )
 
-    return x_bin, y_bin, bg_x_bin, bg_bin, x_error, uncertainties[0]
+    return x_bin, y_bin, bg_x_bin, bg_bin, x_error, uncertainty[0]
 
 
-def light_curve_plot(min_value: int, data_paths: str, gti_numbers: list[int]) -> str:
+def light_curve_plot(min_value: int, data_paths: list[str], gti_numbers: list[int]) -> str:
     """
     Gets and plots the corrected light curve data
 
     Parameters
     ----------
-    min_value : integer
+    min_value : int
         Minimum value used for binning
-    data_path : string
+    data_paths : list[str]
         File path to the light curve
-    gti_numbers : list[integer]
+    gti_numbers : list[int]
         List of GTI numbers
 
     Returns
     -------
-    string
+    str
         Light curve plot as HTML
     """
-    # Constants
-    x_data = []
-    y_data = []
-    x_background = []
-    background = []
-    x_error = []
-    y_uncertainties = []
+    x_data: list[ndarray] = []
+    y_data: list[ndarray] = []
+    x_error: list[ndarray] = []
+    background: list[ndarray] = []
+    x_background: list[ndarray] = []
+    y_uncertainties: list[ndarray] = []
 
     # Get light curve data
     for data_path in data_paths:
@@ -94,23 +108,19 @@ def light_curve_plot(min_value: int, data_paths: str, gti_numbers: list[int]) ->
         ], light_curve_data(min_value, data_path)):
             data_list.append(data)
 
-    kwargs = {
-        'title': 'Light Curve',
-        'xaxis_title': r'$\text{Relative Time}\ (s)$',
-        'yaxis_title': r'$\text{Photons}\ (s^{-1} det^{-1})$',
-        'showlegend': True,
-        'meta': data_paths[0],
-    }
-
     # Plot light curve
     return data_plot(
         gti_numbers,
         x_data,
         y_data,
-        kwargs,
         plot_type='lines+markers',
         x_background_list=x_background,
         background_list=background,
-        x_error=x_error,
+        x_errors=x_error,
         y_uncertainties=y_uncertainties,
+        title='Light Curve',
+        xaxis_title=r'$\text{Relative Time}\ (s)$',
+        yaxis_title=r'$\text{Photons}\ (s^{-1} det^{-1})$',
+        showlegend=True,
+        meta=data_paths[0],
     )

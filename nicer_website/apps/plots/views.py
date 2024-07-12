@@ -3,10 +3,13 @@ Main functions for backend functionality of the interactive plot page
 """
 import re
 import logging as log
+from typing import Any
 
 import numpy as np
+from numpy import ndarray
 from django.conf import settings
 from django.shortcuts import render
+from django.db.models import QuerySet
 from django.http import HttpRequest, HttpResponse, JsonResponse
 
 from nicer_website.apps.file_mgr.models import Item
@@ -14,12 +17,11 @@ from src.utils.spectrum_preprocessing import spectrum_plot
 from src.utils.light_curve_preprocessing import light_curve_plot
 
 # Log axis
-# Get feedback
 # Info field (avg count)
 # Ability to choose grouping binning
 
 # Global variable
-plots = {
+PLOTS: dict[str, dict[str, Any]] = {
     'spectrum': {
         'exists': False,
         'min_value': None,
@@ -50,15 +52,19 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
     JsonResponse
         Json response containing the plot as a list of the HTML element (plotDivs)
     """
-    # Constants
-    min_value = int(request.POST['min_value'])
-    gti_query = request.POST['gti-search']
-    obs_id = request.POST['obs_id']
-    quality = request.POST['quality']
-    plot_type = request.POST['plot_type']
-    dir_path = f"{obs_id}/jspipe/"
-    gti_list = []
-    file_names = []
+    gti: int | str
+    min_value: int = int(request.POST['min_value'])
+    plot_divs: str
+    obs_id: str = request.POST['obs_id']
+    quality: str = request.POST['quality']
+    plot_type: str = request.POST['plot_type']
+    dir_path: str = f'{obs_id}/jspipe/'
+    gti_query: str | list[str] = request.POST['gti-search']
+    gti_range: list[int]
+    gti_list: list[int | range] = []
+    file_names: list[str] = []
+    files: QuerySet
+    file_name: Item
 
     # Filter by quality, observation ID, and filter for files
     files = Item.objects.filter(
@@ -69,7 +75,7 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
 
     # Filter by the plot type and append relative file location to data path
     dir_path = f'{settings.DATA_DIR}/{dir_path}'
-    files = files.filter(name__contains=plots[plot_type]['file_type'])
+    files = files.filter(name__contains=PLOTS[plot_type]['file_type'])
 
     # Remove characters that are not numbers or dashes, and separate by commas
     gti_query = re.sub(r'[^\d,-]', '', gti_query).split(',')
@@ -97,8 +103,7 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
         file_names.append(dir_path + file_name)
 
     # Plot each GTI
-    plot_divs = plots[plot_type]['function'](min_value, file_names, gti_list)
-
+    plot_divs = PLOTS[plot_type]['function'](min_value, file_names, gti_list)
     return JsonResponse({'plotDivs': [plot_divs]})
 
 
@@ -121,14 +126,18 @@ def plot_data(request: HttpRequest) -> JsonResponse:
         observation ID (obsID), quality (quality), if spectrum is plotted (spectrum),
         and if light curve is plotted (lightCurve)
     """
-    # Constants
-    quality = ''
-    obs_id = request.POST['obs_id']
-    quality = request.POST['quality']
-    dir_path = f"{obs_id}/jspipe/"
-    plot_divs = []
-    max_gti = []
-    infos = []
+    file_name: str
+    obs_id: str = request.POST['obs_id']
+    quality: str = request.POST['quality']
+    dir_path: str = f'{obs_id}/jspipe/'
+    max_gti: list[int] = []
+    plot_divs: list[str] = []
+    infos: list[dict[str, Any]] = []
+    plot_type: dict[str, Any]
+    info: ndarray
+    indices: ndarray
+    file_names: ndarray
+    files: QuerySet
 
     # Get all files in observation ID
     files = Item.objects.filter(
@@ -158,7 +167,7 @@ def plot_data(request: HttpRequest) -> JsonResponse:
             infos.append(dict(zip(*info)) | {'GTI': re.search(r'GTI\d+', file_name).group(0)})
 
         # Plot depending on the data type
-        for plot_type in plots.values():
+        for plot_type in PLOTS.values():
             if plot_type['file_type'] in request.POST.values():
                 plot_type['exists'] = True
                 file_names = files.filter(name__contains=plot_type['file_type'])
@@ -178,8 +187,8 @@ def plot_data(request: HttpRequest) -> JsonResponse:
         'plotDivs': plot_divs,
         'obsID': obs_id,
         'quality': quality,
-        'spectrum': plots['spectrum']['exists'],
-        'lightCurve': plots['light_curve']['exists'],
+        'spectrum': PLOTS['spectrum']['exists'],
+        'lightCurve': PLOTS['light_curve']['exists'],
         'maxGTI': max_gti,
         'info': infos,
     })
@@ -194,7 +203,7 @@ def fetch_observations(request: HttpRequest, count: int = 5) -> JsonResponse:
     ----------
     request : HttpRequest
         Request containing the variable 'path' which contains the path and item name
-    count : integer, default = 5
+    count : int, default = 5
         Number of items to return
 
     Returns
@@ -203,8 +212,9 @@ def fetch_observations(request: HttpRequest, count: int = 5) -> JsonResponse:
         Json response containing a dictionary with 5 items matching the query
     """
     # Get the queried observation ID from the request and root path
-    root = Item._meta.get_field('path').get_default() # pylint: disable=protected-access
-    obs_id = request.GET.get('obs_id')
+    root: str = Item._meta.get_field('path').get_default()  # pylint: disable=protected-access
+    obs_id: str = request.GET.get('obs_id')
+    suggested_obs: QuerySet
 
     # Query the database for the first 5 observation IDs that match the query
     suggested_obs = Item.objects.filter(

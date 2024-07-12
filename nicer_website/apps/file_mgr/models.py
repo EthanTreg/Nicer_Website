@@ -1,8 +1,13 @@
+"""
+Models for the file_mgr database
+"""
 from django.db import models
 
 
-# Create your models here.
 class Item(models.Model):
+    """
+    Model for the file manager database to contain the files and directories with their paths
+    """
     dir = 'dir'
     file = 'file'
     item_type = [(dir, 'Dir'), (file, 'File')]
@@ -12,6 +17,10 @@ class Item(models.Model):
     type = models.CharField(max_length=4, choices=item_type, default=dir)
 
     class Meta:
+        """
+        Metadata for the file manager model to prevent duplicate entries with the same name, path,
+        and type, as well as creating an index on the path column to increase indexing performance
+        """
         constraints = [
             models.UniqueConstraint(fields=('name', 'path', 'type'), name='unique_name_path_type'),
         ]
