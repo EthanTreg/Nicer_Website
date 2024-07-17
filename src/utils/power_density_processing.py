@@ -5,12 +5,7 @@ from numpy import ndarray
 import os
 import logging
 
-# Import the data_plot function
 from src.utils.plots import data_plot
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 def normalize_path(path: str) -> str:
@@ -50,13 +45,8 @@ def read_fits_file(file_path: str, gti_numbers: List[int]) -> Tuple[List[Any], f
         raise FileNotFoundError(f"File not found: {normalized_path}")
 
     with fits.open(normalized_path) as hdul:
-        logger.info(f"FITS file structure: {[hdu.name for hdu in hdul]}")
-
         header = hdul[1].header
         all_data = hdul[1].data
-
-        logger.info(f"Data type: {type(all_data)}")
-        logger.info(f"Data shape: {all_data.shape if hasattr(all_data, 'shape') else 'N/A'}")
 
         gti_data = []
         if isinstance(all_data, fits.fitsrec.FITS_rec):
@@ -68,23 +58,12 @@ def read_fits_file(file_path: str, gti_numbers: List[int]) -> Tuple[List[Any], f
             for gti_number in gti_numbers:
                 if gti_number < len(all_data):
                     gti_data.append(all_data[gti_number])
-                else:
-                    logger.warning(f"GTI number {gti_number} out of range for file {file_path}")
         else:
-            logger.error(f"Unexpected data type: {type(all_data)}")
             raise ValueError(f"Unexpected data type in FITS file: {type(all_data)}")
-
-        logger.info(f"Number of GTIs processed: {len(gti_data)}")
-        for i, data in enumerate(gti_data):
-            logger.info(f"GTI {gti_numbers[i]} data type: {type(data)}")
-            logger.info(f"GTI {gti_numbers[i]} data shape: {data.shape if hasattr(data, 'shape') else 'N/A'}")
 
     return gti_data, header
 
 def process_pds_data(pds_data: np.ndarray, rsp_data: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    logger.info(f"pds_data type: {type(pds_data)}, shape: {pds_data.shape}")
-    logger.info(f"rsp_data type: {type(rsp_data)}, shape: {rsp_data.shape}")
-
     def get_column(data, column_name):
         if isinstance(data, np.ndarray) and data.dtype.names is not None:
             # Structured array
@@ -96,32 +75,26 @@ def process_pds_data(pds_data: np.ndarray, rsp_data: np.ndarray) -> Tuple[np.nda
         else:
             raise ValueError(f"Unexpected data type or shape: {type(data)}, shape: {data.shape}")
 
-    try:
-        freq_min = get_column(rsp_data, 'E_MIN')
-        freq_max = get_column(rsp_data, 'E_MAX')
-        freq_center = (freq_min + freq_max) / 2
+    freq_min = get_column(rsp_data, 'E_MIN')
+    freq_max = get_column(rsp_data, 'E_MAX')
+    freq_center = (freq_min + freq_max) / 2
 
-        power = get_column(pds_data, 'RATE')
-        error = get_column(pds_data, 'STAT_ERR')
+    power = get_column(pds_data, 'RATE')
+    error = get_column(pds_data, 'STAT_ERR')
 
-        # Calculate frequency width
-        freq_width = freq_max - freq_min
+    # Calculate frequency width
+    freq_width = freq_max - freq_min
 
-        # Divide rate and error by frequency width
-        power_density = power / freq_width
-        error_density = error / freq_width
+    # Divide rate and error by frequency width
+    power_density = power / freq_width
+    error_density = error / freq_width
 
-        # Multiply by frequency to get f x PDS Power
-        power_density = power_density * freq_center
-        error_density = error_density * freq_center
+    # Multiply by frequency to get f x PDS Power
+    power_density = power_density * freq_center
+    error_density = error_density * freq_center
 
-        return freq_center, power_density, error_density
+    return freq_center, power_density, error_density
 
-    except Exception as e:
-        logger.error(f"Error in process_pds_data: {str(e)}")
-        logger.error(f"PDS data first few rows: {pds_data[:5]}")
-        logger.error(f"RSP data first few rows: {rsp_data[:5]}")
-        raise
 
 
 def get_pds_data_and_plot(min_value: int, data_paths: List[str], gti_numbers: List[int]) -> str:
@@ -145,59 +118,27 @@ def get_pds_data_and_plot(min_value: int, data_paths: List[str], gti_numbers: Li
     x_data_list: List[np.ndarray] = []
     y_data_list: List[np.ndarray] = []
     y_uncertainties: List[np.ndarray] = []
-    gti_labels: List[str] = []
 
-    logger.info(f"data_paths - {data_paths}")
     base_path = data_paths[0]
-    logger.info(f"base_path - {base_path}")
-    logger.info(f"gti_numbers - {gti_numbers}")
-
 
     for gti_number in gti_numbers:
         pds_path = base_path.replace("GTI0", f"GTI{gti_number}")
         rsp_path = pds_path.replace("-bin.pds", "-fak.rsp")
 
-        try:
-            logger.info(f"Processing PDS file: {pds_path}")
-            pds_data_list, _ = read_fits_file(pds_path, [gti_number])
+        pds_data_list, _ = read_fits_file(pds_path, [gti_number])
+        rsp_data_list, _ = read_fits_file(rsp_path, [gti_number])
 
-            logger.info(f"Processing RSP file: {rsp_path}")
-            rsp_data_list, _ = read_fits_file(rsp_path, [gti_number])
-
-            if pds_data_list and rsp_data_list:
-                pds_data = pds_data_list[0]
-                rsp_data = rsp_data_list[0]
-                try:
-                    freq_center, power_density, error_density = process_pds_data(pds_data, rsp_data)
-                    x_data_list.append(freq_center)
-                    y_data_list.append(power_density)
-                    y_uncertainties.append(error_density)
-                    gti_labels.append(f"GTI{gti_number}")
-                except Exception as e:
-                    logger.error(f"Error processing data for GTI{gti_number}: {str(e)}")
-                    logger.error(
-                        f"PDS data type: {type(pds_data)}, shape: {pds_data.shape if hasattr(pds_data, 'shape') else 'N/A'}")
-                    logger.error(
-                        f"RSP data type: {type(rsp_data)}, shape: {rsp_data.shape if hasattr(rsp_data, 'shape') else 'N/A'}")
-                    continue
-        except FileNotFoundError:
-            logger.warning(f"Files for GTI{gti_number} not found. Skipping.")
-            continue
-        except Exception as e:
-            logger.error(f"Error processing files for GTI{gti_number}: {str(e)}")
-            continue
+        if pds_data_list and rsp_data_list:
+            pds_data = pds_data_list[0]
+            rsp_data = rsp_data_list[0]
+            freq_center, power_density, error_density = process_pds_data(pds_data, rsp_data)
+            x_data_list.append(freq_center)
+            y_data_list.append(power_density)
+            y_uncertainties.append(error_density)
 
     if not x_data_list:
         error_msg = "No valid data to plot"
-        logger.error(error_msg)
         return error_msg
-
-    logger.info(f"Number of processed datasets: {len(x_data_list)}")
-    for i, (x, y, yerr) in enumerate(zip(x_data_list, y_data_list, y_uncertainties)):
-        logger.info(f"Dataset {i} ({gti_labels[i]}):")
-        logger.info(f"  x_data shape: {x.shape}")
-        logger.info(f"  y_data shape: {y.shape}")
-        logger.info(f"  y_uncertainty shape: {yerr.shape}")
 
     # # Calculate logarithmic ranges with a margin
     margin_factor = 0.1  # 10% margin
@@ -233,11 +174,9 @@ def get_pds_data_and_plot(min_value: int, data_paths: List[str], gti_numbers: Li
         )
     except Exception as e:
         error_msg = f"Error in data_plot: {str(e)}"
-        logger.error(error_msg)
         return error_msg
 
 
-# You might want to keep this function for compatibility or future use
 def power_density_plot(
         min_value: int,
         data_paths: List[Tuple[str, str]],
