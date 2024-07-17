@@ -7,6 +7,9 @@ import plotly.graph_objs as go
 from numpy import ndarray
 from plotly.offline import plot
 from plotly.colors import qualitative
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def data_plot(
@@ -49,80 +52,101 @@ def data_plot(
     str
         Plot as HTML
     """
-    number: int
-    color: str
-    x_error: dict[str, bool | str | ndarray] | ndarray
-    y_uncertainty: dict[str, bool | str | ndarray] | ndarray
-    x_data: ndarray
-    y_data: ndarray
-    x_background: ndarray
-    fig: go.Figure = go.Figure()
+    try:
+        if not all(
+                len(lst) == len(gti_numbers) for lst in [x_data_list, y_data_list, y_uncertainties] if lst is not None):
+            raise ValueError("All input lists must have the same length as gti_numbers")
 
-    if not y_uncertainties:
-        y_uncertainties = [None] * len(x_data_list)
+        # Handle None values
+        if x_errors is None:
+            x_errors = [None] * len(gti_numbers)
+        if x_background_list is None:
+            x_background_list = x_data_list
+        if background_list is None:
+            background_list = [None] * len(gti_numbers)
+        if y_uncertainties is None:
+            y_uncertainties = [None] * len(gti_numbers)
+        number: int
+        color: str
+        x_error: dict[str, bool | str | ndarray] | ndarray
+        y_uncertainty: dict[str, bool | str | ndarray] | ndarray
+        x_data: ndarray
+        y_data: ndarray
+        x_background: ndarray
+        fig: go.Figure = go.Figure()
 
-    if not x_background_list:
-        x_background_list = x_data_list
+        if not y_uncertainties:
+            y_uncertainties = [None] * len(x_data_list)
 
-    if not background_list:
-        background_list = [None] * len(x_data_list)
+        if not x_background_list:
+            x_background_list = x_data_list
 
-    # Plot each GTI
-    for number, x_data, y_data, x_background, background, x_error, y_uncertainty, color in zip(
-        gti_numbers,
-        x_data_list,
-        y_data_list,
-        x_background_list,
-        background_list,
-        x_errors,
-        y_uncertainties,
-        qualitative.Plotly,
-    ):
-        if x_error is not None:
-            x_error = {
-                'type': 'data',
-                'array': x_error,
-                'visible': True,
-            }
+        if not background_list:
+            background_list = [None] * len(x_data_list)
 
-        if y_uncertainty is not None:
-            y_uncertainty = {
-                'type': 'data',
-                'array': y_uncertainty,
-                'visible': True,
-            }
+        # Plot each GTI
+        for number, x_data, y_data, x_background, background, x_error, y_uncertainty, color in zip(
+            gti_numbers,
+            x_data_list,
+            y_data_list,
+            x_background_list,
+            background_list,
+            x_errors,
+            y_uncertainties,
+            qualitative.Plotly,
+        ):
+            if x_error is not None:
+                x_error = {
+                    'type': 'data',
+                    'array': x_error,
+                    'visible': True,
+                }
 
-        # Plot GTI data
-        fig.add_trace(go.Scatter(
-            x=x_data,
-            y=y_data,
-            error_x=x_error,
-            error_y=y_uncertainty,
-            mode=plot_type,
-            name=f'GTI{number}',
-            opacity=0.8,
-            line={'color': color},
-            legendgroup=number,
-        ))
+            if y_uncertainty is not None:
+                y_uncertainty = {
+                    'type': 'data',
+                    'array': y_uncertainty,
+                    'visible': True,
+                }
 
-        # Plot background if provided
-        if background is not None:
+            # Plot GTI data
             fig.add_trace(go.Scatter(
-                x=x_background,
-                y=background,
-                mode='lines',
-                name=f'GTI{number} BG',
+                x=x_data,
+                y=y_data,
+                error_x=x_error,
+                error_y=y_uncertainty,
+                mode=plot_type,
+                name=f'GTI{number}',
                 opacity=0.8,
                 line={'color': color},
                 legendgroup=number,
             ))
 
-    # fig.update_layout(legend={'groupclick': 'toggleitem'}, **kwargs)
-    fig.update_layout(**kwargs)
+            # Plot background if provided
+            if background is not None:
+                fig.add_trace(go.Scatter(
+                    x=x_background,
+                    y=background,
+                    mode='lines',
+                    name=f'GTI{number} BG',
+                    opacity=0.8,
+                    line={'color': color},
+                    legendgroup=number,
+                ))
 
-    return plot(
-        fig,
-        output_type='div',
-        include_plotlyjs=False,
-        config={'displaylogo': False},
-    )
+        # fig.update_layout(legend={'groupclick': 'toggleitem'}, **kwargs)
+        fig.update_layout(**kwargs)
+
+        return plot(
+            fig,
+            output_type='div',
+            include_plotlyjs=False,
+            config={'displaylogo': False},
+        )
+    except Exception as e:
+        logger.error(f"Error in data_plot: {str(e)}")
+        logger.error(f"gti_numbers: {gti_numbers}")
+        logger.error(f"x_data_list: {type(x_data_list)}, length: {len(x_data_list)}")
+        logger.error(f"y_data_list: {type(y_data_list)}, length: {len(y_data_list)}")
+        logger.error(f"y_uncertainties: {type(y_uncertainties)}, length: {len(y_uncertainties)}")
+        return f"Error in data_plot: {str(e)}"

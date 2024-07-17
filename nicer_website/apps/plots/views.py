@@ -15,6 +15,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from nicer_website.apps.file_mgr.models import Item
 from src.utils.spectrum_preprocessing import spectrum_plot
 from src.utils.light_curve_preprocessing import light_curve_plot
+from src.utils.power_density_processing import get_pds_data_and_plot
 
 # Log axis
 # Info field (avg count)
@@ -33,6 +34,12 @@ PLOTS: dict[str, dict[str, Any]] = {
         'min_value': 100,
         'file_type': '.lc.gz',
         'function': light_curve_plot,
+    },
+    'power_density_spectrum': {
+        'exists': False,
+        'min_value': None,
+        'file_type': '-bin.pds',
+        'function': get_pds_data_and_plot,
     }
 }
 
@@ -93,8 +100,11 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
     for gti in gti_list:
         file_name = files.filter(name__regex=fr'^\w*GTI{gti}[^\d][-_.\w]*$').first()
 
+
         if file_name:
             file_names.append(dir_path + file_name.name)
+
+    print(file_names)
 
     # If not GTI found, use the first available GTI
     if not file_names:
@@ -111,7 +121,7 @@ def plot_data(request: HttpRequest) -> JsonResponse:
     """
     Tries to plot the specified data, matching the correct plot type
 
-    Supports energy spectrum and light curve
+    Supports energy spectrum, light curve, and power density
 
     Parameters
     ----------
@@ -171,14 +181,22 @@ def plot_data(request: HttpRequest) -> JsonResponse:
             if plot_type['file_type'] in request.POST.values():
                 plot_type['exists'] = True
                 file_names = files.filter(name__contains=plot_type['file_type'])
+                file_names = file_names.exclude(name__regex=r'_BAND\d+-bin\.pds')
                 file_name = file_names.first().name
                 max_gti.append(len(file_names))
 
-                plot_divs.append(plot_type['function'](
-                    plot_type['min_value'],
-                    [dir_path + file_name],
-                    [0],
-                ))
+                if plot_type['file_type'] == '.pds':
+                    rsp_file_paths = [f"{dir_path}{file.replace('.pds', '.rsp')}" for file in file_names]
+                    data_paths = list(zip(file_names, rsp_file_paths))
+                    titles = [f'PDS Overview GTI {gti}' for gti in range(len(file_names))]
+                    output_files = [f'pds_overview_GTI{gti}.png' for gti in range(len(file_names))]
+                    plot_divs.append(get_pds_data_and_plot(plot_type['min_value'], data_paths, titles, output_files))
+                else:
+                    plot_divs.append(plot_type['function'](
+                        plot_type['min_value'],
+                        [dir_path + file_name],
+                        [0],
+                    ))
 
     except AttributeError as error:
         log.error(f'{error}\nNo valid data in {dir_path}')
@@ -189,6 +207,7 @@ def plot_data(request: HttpRequest) -> JsonResponse:
         'quality': quality,
         'spectrum': PLOTS['spectrum']['exists'],
         'lightCurve': PLOTS['light_curve']['exists'],
+        'powerSpectrum': PLOTS['power_density_spectrum']['exists'],
         'maxGTI': max_gti,
         'info': infos,
     })
