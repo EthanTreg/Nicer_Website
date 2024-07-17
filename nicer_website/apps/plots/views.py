@@ -100,11 +100,8 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
     for gti in gti_list:
         file_name = files.filter(name__regex=fr'^\w*GTI{gti}[^\d][-_.\w]*$').first()
 
-
         if file_name:
             file_names.append(dir_path + file_name.name)
-
-    print(file_names)
 
     # If not GTI found, use the first available GTI
     if not file_names:
@@ -144,6 +141,7 @@ def plot_data(request: HttpRequest) -> JsonResponse:
     plot_divs: list[str] = []
     infos: list[dict[str, Any]] = []
     plot_type: dict[str, Any]
+    logger: log.Logger = log.getLogger(__name__)
     info: ndarray
     indices: ndarray
     file_names: ndarray
@@ -181,25 +179,18 @@ def plot_data(request: HttpRequest) -> JsonResponse:
             if plot_type['file_type'] in request.POST.values():
                 plot_type['exists'] = True
                 file_names = files.filter(name__contains=plot_type['file_type'])
-                file_names = file_names.exclude(name__regex=r'_BAND\d+-bin\.pds')
+                file_names = file_names.exclude(name__regex=r'_BAND\d+')
                 file_name = file_names.first().name
                 max_gti.append(len(file_names))
 
-                if plot_type['file_type'] == '.pds':
-                    rsp_file_paths = [f"{dir_path}{file.replace('.pds', '.rsp')}" for file in file_names]
-                    data_paths = list(zip(file_names, rsp_file_paths))
-                    titles = [f'PDS Overview GTI {gti}' for gti in range(len(file_names))]
-                    output_files = [f'pds_overview_GTI{gti}.png' for gti in range(len(file_names))]
-                    plot_divs.append(get_pds_data_and_plot(plot_type['min_value'], data_paths, titles, output_files))
-                else:
-                    plot_divs.append(plot_type['function'](
-                        plot_type['min_value'],
-                        [dir_path + file_name],
-                        [0],
-                    ))
+                plot_divs.append(plot_type['function'](
+                    plot_type['min_value'],
+                    [dir_path + file_name],
+                    [0],
+                ))
 
     except AttributeError as error:
-        log.error(f'{error}\nNo valid data in {dir_path}')
+        logger.error(f'{error}\nNo valid data in {dir_path}')
 
     return JsonResponse({
         'plotDivs': plot_divs,
