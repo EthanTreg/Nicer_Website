@@ -98,29 +98,30 @@ def light_curve_plot(min_value: int, data_paths: list[str], gti_numbers: list[in
 
     # Get light curve data
     for data_path in data_paths:
-        for data_list, data in zip([
-            x_data,
-            y_data,
-            x_background,
-            background,
-            x_error,
-            y_uncertainties
-        ], light_curve_data(min_value, data_path)):
-            data_list.append(data)
+        x_bin, y_bin, bg_x_bin, bg_bin, x_err, uncertainty = light_curve_data(min_value, data_path)
+        x_data.append(x_bin)
+        y_data.append(y_bin)
+        x_background.append(bg_x_bin)
+        background.append(bg_bin)
+        x_error.append(x_err)
+        y_uncertainties.append(uncertainty)
 
     # Plot light curve
     return data_plot(
-        gti_numbers,
-        x_data,
-        y_data,
+        gti_numbers=gti_numbers,
+        x_data_list=x_data,
+        y_data_list=y_data,
         plot_type='lines+markers',
         x_background_list=x_background,
         background_list=background,
         x_errors=x_error,
         y_uncertainties=y_uncertainties,
-        title='Light Curve',
-        xaxis_title=r'$\text{Relative Time}\ (s)$',
-        yaxis_title=r'$\text{Photons}\ (s^{-1} det^{-1})$',
-        showlegend=True,
-        meta=data_paths[0],
+        layout_kwargs={
+            'title': 'Light Curve',
+            'xaxis_title': r'$\text{Relative Time}\ (s)$',
+            'yaxis_title': r'$\text{Photons}\ (s^{-1} det^{-1})$',
+            'showlegend': True,
+        },
+        plot_kwargs={'mode': 'markers'},
     )
+

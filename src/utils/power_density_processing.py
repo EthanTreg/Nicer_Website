@@ -197,19 +197,18 @@ def get_pds_data_and_plot(_, data_paths: List[str], gti_numbers: List[int]) -> s
         gti_numbers=gti_numbers,
         x_data_list=x_data_list,
         y_data_list=y_data_list,
-        plot_type='markers',
         y_uncertainties=y_uncertainties,
-        x_errors=None,
-        x_background_list=None,
-        background_list=None,
-        title='Power Density Spectrum',
-        xaxis_title='Frequency (Hz)',
-        yaxis_title='f x PDS Power (rms)',
-        xaxis_type='log',
-        yaxis_type='log',
-        showlegend=True,
-        xaxis_range=xaxis_range,
-        yaxis_range=yaxis_range,
+        plot_kwargs={'mode': 'markers'},
+        layout_kwargs={
+            'title': 'Power Density Spectrum',
+            'xaxis_title': 'Frequency (Hz)',
+            'yaxis_title': 'f x PDS Power (rms)',
+            'xaxis_type': 'log',
+            'yaxis_type': 'log',
+            'showlegend': True,
+            'xaxis_range': xaxis_range,
+            'yaxis_range': yaxis_range,
+        }
     )
 
 

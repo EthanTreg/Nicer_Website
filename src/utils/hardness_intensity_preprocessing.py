@@ -1,3 +1,6 @@
+"""
+Utilities to correct HID
+"""
 import numpy as np
 from typing import List, Tuple
 import os
@@ -127,10 +130,6 @@ def get_hid_data_and_plot(_, data_paths: List[str], gti_numbers: List[int]) -> s
     if not all_hardness:
         return "No valid data to plot"
 
-    all_hardness = np.array(all_hardness)
-    all_intensity = np.array(all_intensity)
-    all_time = np.array(all_time)
-
     logging.warning(f"x data {all_hardness}")
     logging.warning(f"y data {all_intensity}")
 
@@ -150,14 +149,17 @@ def get_hid_data_and_plot(_, data_paths: List[str], gti_numbers: List[int]) -> s
     norm_time = (all_time - np.min(all_time)) / (np.max(all_time) - np.min(all_time))
 
     return data_plot(
-        x_data=all_hardness,
-        y_data=all_intensity,
+        x_data_list=[all_hardness],
+        y_data_list=[all_intensity],
         color_data=norm_time,
-        title='Hardness-Intensity Diagram',
-        xaxis_title='Hardness (4-12 keV / 2-4 keV)',
-        yaxis_title='Intensity (counts/s)',
-        xaxis_type='log',
-        yaxis_type='log',
-        xaxis_range=xaxis_range,
-        yaxis_range=yaxis_range,
+        plot_kwargs={'mode': 'markers'},
+        layout_kwargs={
+            'title': 'Hardness-Intensity Diagram',
+            'xaxis_title': 'Hardness (4-12 keV / 2-4 keV)',
+            'yaxis_title': 'Intensity (counts/s)',
+            'xaxis_type': 'log',
+            'yaxis_type': 'log',
+            'xaxis_range': xaxis_range,
+            'yaxis_range': yaxis_range,
+        }
     )

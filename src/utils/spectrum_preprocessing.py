@@ -201,17 +201,20 @@ def spectrum_plot(
 
     # Plot spectrum
     return data_plot(
-        gti_numbers,
-        x_data,
-        y_data,
+        gti_numbers = gti_numbers,
+        x_data_list = x_data,
+        y_data_list = y_data,
         x_background_list=x_background,
         background_list=background,
         x_errors=x_error,
         y_uncertainties=y_uncertainties,
-        title='Spectrum',
-        xaxis_title= r'$\text{Energy}\ (keV)$',
-        yaxis_title=r'$\text{Photons}\ (keV^{-1} s^{-1} det^{-1})$',
-        xaxis_type='log',
-        yaxis_type='log',
-        showlegend=True,
+        plot_kwargs={'mode': 'markers'},
+        layout_kwargs={
+            'title': 'Spectrum',
+            'xaxis_title': r'$\text{Energy}\ (keV)$',
+            'yaxis_title': r'$\text{Photons}\ (keV^{-1} s^{-1} det^{-1})$',
+            'xaxis_type':'log',
+            'yaxis_type':'log',
+            'showlegend' : True,
+        }
     )
