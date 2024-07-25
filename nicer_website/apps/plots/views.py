@@ -16,6 +16,7 @@ from nicer_website.apps.file_mgr.models import Item
 from src.utils.spectrum_preprocessing import spectrum_plot
 from src.utils.light_curve_preprocessing import light_curve_plot
 from src.utils.power_density_processing import get_pds_data_and_plot
+from src.utils.hardness_intensity_preprocessing import get_hid_data_and_plot
 
 # Log axis
 # Info field (avg count)
@@ -40,7 +41,13 @@ PLOTS: dict[str, dict[str, Any]] = {
         'min_value': None,
         'file_type': '-bin.pds',
         'function': get_pds_data_and_plot,
-    }
+    },
+    'hardness_intensity_diagram': {
+        'exists': False,
+        'min_value': None,
+        'file_type': '.lc.gz',
+        'function': get_hid_data_and_plot,
+    },
 }
 
 
@@ -118,7 +125,7 @@ def plot_data(request: HttpRequest) -> JsonResponse:
     """
     Tries to plot the specified data, matching the correct plot type
 
-    Supports energy spectrum, light curve, and power density
+    Supports energy spectrum, light curve, power density, and hardness intensity
 
     Parameters
     ----------
@@ -175,19 +182,30 @@ def plot_data(request: HttpRequest) -> JsonResponse:
             infos.append(dict(zip(*info)) | {'GTI': re.search(r'GTI\d+', file_name).group(0)})
 
         # Plot depending on the data type
-        for plot_type in PLOTS.values():
-            if plot_type['file_type'] in request.POST.values():
-                plot_type['exists'] = True
-                file_names = files.filter(name__contains=plot_type['file_type'])
+        for plot_type, plot_info in PLOTS.items():
+            # mapping between HTML form names and PLOTS keys
+            html_to_plot_type = {
+                'spectrum': 'spectrum',
+                'light-curve': 'light_curve',
+                'power-density-spectrum': 'power_density_spectrum',
+                'hardness-intensity-diagram': 'hardness_intensity_diagram'
+            }
+
+            # Check if this plot type is requested in the POST data
+            if any(html_name for html_name, plot_key in html_to_plot_type.items()
+                   if html_name in request.POST and plot_key == plot_type):
+                plot_info['exists'] = True
+                file_names = files.filter(name__contains=plot_info['file_type'])
                 file_names = file_names.exclude(name__regex=r'_BAND\d+')
                 file_name = file_names.first().name
                 max_gti.append(len(file_names))
 
-                plot_divs.append(plot_type['function'](
-                    plot_type['min_value'],
+                plot_divs.append(plot_info['function'](
+                    plot_info['min_value'],
                     [dir_path + file_name],
                     [0],
                 ))
+
 
     except AttributeError as error:
         logger.error(f'{error}\nNo valid data in {dir_path}')
@@ -199,6 +217,7 @@ def plot_data(request: HttpRequest) -> JsonResponse:
         'spectrum': PLOTS['spectrum']['exists'],
         'lightCurve': PLOTS['light_curve']['exists'],
         'powerSpectrum': PLOTS['power_density_spectrum']['exists'],
+        'hardnessIntensity': PLOTS['hardness_intensity_diagram']['exists'],
         'maxGTI': max_gti,
         'info': infos,
     })

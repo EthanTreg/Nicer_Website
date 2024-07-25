@@ -46,12 +46,14 @@
         </div>
 
         <div id="options" class="column checkboxes">
-            <input id="spectrum-check" type="checkbox" name="spectrum" value=".jsgrp" {% if spectrum %}checked{% endif %}>
+            <input id="spectrum-check" type="checkbox" name="spectrum" value="spectrum" {% if spectrum %}checked{% endif %}>
             <label for="spectrum-check">Spectrum</label>
-            <input id="light-curve-check" type="checkbox" name="light-curve" value=".lc.gz" {% if lightCurve %}checked{% endif %}>
+            <input id="light-curve-check" type="checkbox" name="light-curve" value="light-curve" {% if lightCurve %}checked{% endif %}>
             <label for="light-curve-check">Light Curve</label>
-            <input id="power-spectrum-check" type="checkbox" name="power-density-spectrum" value="-bin.pds" {% if powerSpectrum %}checked{% endif %}>
+            <input id="power-spectrum-check" type="checkbox" name="power-density-spectrum" value="power-density-spectrum" {% if powerSpectrum %}checked{% endif %}>
             <label for="power-spectrum-check">Power Density Spectrum</label>
+            <input id="hardness-intensity-check" type="checkbox" name="hardness-intensity-diagram" value="hardness-intensity-diagram" {% if hardnessIntensity %}checked{% endif %}>
+            <label for="hardness-intensity-check">Hardness Intensity Diagram</label>
         </div>
 
         <div class="column">
