@@ -455,7 +455,8 @@ def summed_spectrum_plot(
     data_paths: List[str],
     gti_numbers: List[int],
     cut_off: Optional[Tuple[float, float]] = None,
-    gti_labels: Optional[List[str]] = None
+    gti_labels: Optional[List[str]] = None,
+    bg_dash: str = 'solid',
 ) -> str:
     """
     Create a summed spectrum plot across multiple GTIs.
@@ -658,7 +659,7 @@ def summed_spectrum_plot(
             background_list=[net_background],
             x_errors=[x_error],
             y_uncertainties=[net_rate_error],
-            plot_kwargs={'mode': 'markers'},
+            plot_kwargs={'mode': 'markers', 'bg_dash': bg_dash},
             layout_kwargs={
                 'title': f'Summed Spectrum {obs_id}',
                 'xaxis_title': r'$\text{Energy}\ (keV)$',

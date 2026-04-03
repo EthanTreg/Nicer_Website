@@ -24,6 +24,7 @@ from src.utils.light_curve_preprocessing import light_curve_plot
 from src.utils.power_density_processing import get_pds_data_and_plot
 from src.utils.hardness_intensity_preprocessing import get_hid_data_and_plot
 from src.utils.summed_spectrum_preprocessing import summed_spectrum_plot
+from src.utils.background_screening import screen_gti_files, get_screening_summary
 
 
 import logging
@@ -207,6 +208,29 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
    plot_type_str: str = request.POST.get('plot_type', '')
    gti_query_str: str = request.POST.get('gti-search', '')
    requested_min_value_str = request.POST.get('min_value')
+   
+   # Parse screening parameters with explicit logging
+   apply_screening_str = request.POST.get('apply_screening', 'false')
+   apply_screening = apply_screening_str.lower() == 'true'
+   
+   logger.info(f"[plot_gti] Screening parameter raw value: '{apply_screening_str}'")
+   logger.info(f"[plot_gti] Screening enabled: {apply_screening}")
+   
+   if apply_screening:
+       try:
+           screening_energy_low = float(request.POST.get('screening_energy_low', 2.0))
+           screening_energy_high = float(request.POST.get('screening_energy_high', 5.0))
+           screening_min_bad_channels = int(request.POST.get('screening_min_bad_channels', 2))
+           logger.info(f"[plot_gti] Screening params: energy={screening_energy_low}-{screening_energy_high} keV, min_bad={screening_min_bad_channels}")
+       except (ValueError, TypeError) as e:
+           logger.warning(f"[plot_gti] Error parsing screening params: {e}, using defaults")
+           screening_energy_low = 2.0
+           screening_energy_high = 5.0
+           screening_min_bad_channels = 2
+   else:
+       screening_energy_low = 2.0
+       screening_energy_high = 5.0
+       screening_min_bad_channels = 2
 
    logger.info(f"[plot_gti] Raw received values:")
    logger.info(f"[plot_gti]   - obs_id: '{obs_id}'")
@@ -214,6 +238,7 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
    logger.info(f"[plot_gti]   - plot_type: '{plot_type_str}'")
    logger.info(f"[plot_gti]   - gti-search: '{gti_query_str}'")
    logger.info(f"[plot_gti]   - min_value: '{requested_min_value_str}'")
+   logger.info(f"[plot_gti]   - apply_screening: {apply_screening}")
 
    # Check if this is a combined observations request
    is_combined_request = 'combined_obs_ids' in request.POST
@@ -228,7 +253,7 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
 
    # Enhanced plot type mapping - handle both underscore and hyphen formats
    plot_type_mapping = {
-       'time': 'hardness_intensity_diagram',  # Legacy mapping
+       'time': 'hardness_intensity_diagram',
        'hardness-intensity-diagram': 'hardness_intensity_diagram',
        'hardness_intensity_diagram': 'hardness_intensity_diagram',
        'power-density-spectrum': 'power_density_spectrum',
@@ -258,7 +283,7 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
    logger.info(f"[plot_gti] Available PLOTS keys: {list(PLOTS.keys())}")
    
    if plot_type not in PLOTS:
-       logger.error(f"[plot_gti] Invalid plot_type: '{original_plot_type}' (parsed as '{plot_type}'). Valid types: {list(PLOTS.keys())}")
+       logger.error(f"[plot_gti] Invalid plot_type: '{original_plot_type}'")
        return JsonResponse({'error': f'Invalid plot type: {plot_type_str}'}, status=400)
 
    logger.info(f"[plot_gti] Plot type validation passed. Proceeding with '{plot_type}'")
@@ -266,18 +291,13 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
    default_min_value = PLOTS[plot_type].get('min_value')
    min_value: int | None
 
-
    if requested_min_value_str is not None and requested_min_value_str != '':
        try:
            min_value = int(requested_min_value_str)
-           logger.info(f"[plot_gti] Parsed min_value from request: {min_value}")
        except ValueError:
-           logger.warning(f"[plot_gti] Could not parse requested_min_value_str '{requested_min_value_str}' to int. Using default: {default_min_value}")
            min_value = default_min_value
    else:
        min_value = default_min_value
-       logger.info(f"[plot_gti] min_value not in request or empty. Using default: {min_value}")
-
 
    logger.info(f"[plot_gti] Final min_value for plotting: {min_value}")
 
@@ -366,7 +386,6 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
    gti_list_parsed: list[int] = []
    if gti_query_str:
        processed_gti_query_parts = re.sub(r'[^\d,-]', '', gti_query_str).split(',')
-       logger.info(f"[plot_gti] Processed GTI query parts: {processed_gti_query_parts}")
        for gti_val_part in processed_gti_query_parts:
            if not gti_val_part: continue
            if re.search(r'^\d+-\d+$', gti_val_part):
@@ -376,94 +395,75 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
                gti_list_parsed.extend(range(start, end + 1))
            elif gti_val_part.isdigit():
                gti_list_parsed.append(int(gti_val_part))
-           else:
-               logger.warning(f"[plot_gti] Skipping invalid GTI value in query part: '{gti_val_part}'")
-       gti_list_parsed = sorted(list(set(gti_list_parsed))) # Unique and sorted
-   logger.info(f"[plot_gti] Parsed gti_list from query: {gti_list_parsed}")
+       gti_list_parsed = sorted(list(set(gti_list_parsed)))
 
-   # Only use all GTIs for HID when no GTIs are specified by the user
    use_all_hid_files = (plot_type == 'hardness_intensity_diagram' and not gti_list_parsed)
 
    final_file_paths_to_plot: list[str] = []
    final_gti_numbers_for_plot_func: list[int] = []
-
-
    full_dir_path_for_files = os.path.join(settings.DATA_DIR, single_obs_dir_path_relative)
-
 
    if gti_list_parsed:
        for gti_num in gti_list_parsed:
-           # Correct regex: non-digit or end after the number
            file_match_item = plot_specific_files_qs.filter(
                name__regex=fr'GTI0*{gti_num}([^\d]|$)'
            ).first()
            if file_match_item:
-               logger.info(f"[plot_gti] Found file '{file_match_item.name}' for GTI '{gti_num}'")
                final_file_paths_to_plot.append(os.path.join(full_dir_path_for_files, file_match_item.name))
                final_gti_numbers_for_plot_func.append(gti_num)
-           else:
-               logger.warning(f"[plot_gti] No file found for GTI '{gti_num}' with plot type '{plot_type}'")
-
-
-   logger.info(f"[plot_gti] Files selected based on gti_list_parsed: {final_file_paths_to_plot}")
-
 
    if not final_file_paths_to_plot:
-       logger.info(f"[plot_gti] No files found for specified GTIs (or no GTIs specified in query). Attempting to use a default GTI for plot type '{plot_type}'.")
-       default_file_item = plot_specific_files_qs.first() # Takes the first available file for this plot type
+       default_file_item = plot_specific_files_qs.first()
        if default_file_item:
            final_file_paths_to_plot.append(os.path.join(full_dir_path_for_files, default_file_item.name))
-           # Try to extract GTI number from this default file to pass to the plotting function
            match = re.search(r'GTI(\d+)', default_file_item.name)
            if match:
-               default_gti_num = int(match.group(1))
-               final_gti_numbers_for_plot_func = [default_gti_num] # Use this GTI for the plot call
-               logger.info(f"[plot_gti] Using default file '{default_file_item.name}' (extracted GTI: {default_gti_num}) for plot type '{plot_type}'")
+               final_gti_numbers_for_plot_func = [int(match.group(1))]
            else:
-               final_gti_numbers_for_plot_func = [0] # Fallback GTI number if not extractable
-               logger.warning(f"[plot_gti] Could not extract GTI number from default file '{default_file_item.name}'. Using GTI 0 as fallback for plotting function.")
+               final_gti_numbers_for_plot_func = [0]
        else:
-           # This case should have been caught by "if not plot_specific_files_qs.exists()" earlier, but as a safeguard:
-           logger.error(f"[plot_gti] CRITICAL: No default file could be found for plot type '{plot_type}' for obs_id '{obs_id}'.")
            return JsonResponse({'error': 'No data files could be selected for plotting.'}, status=404)
 
+   # Apply background screening if requested for spectrum plots
+   screening_summary = None
+   if apply_screening and plot_type in ['spectrum', 'summed_spectrum']:
+       logger.info(f"[plot_gti] *** APPLYING BACKGROUND SCREENING ***")
+       logger.info(f"[plot_gti] Energy range: {screening_energy_low}-{screening_energy_high} keV")
+       logger.info(f"[plot_gti] Min bad channels: {screening_min_bad_channels}")
+       logger.info(f"[plot_gti] Files to screen: {len(final_file_paths_to_plot)}")
+       
+       screened_files, screened_gtis, screening_results = screen_gti_files(
+           final_file_paths_to_plot,
+           final_gti_numbers_for_plot_func,
+           energy_low=screening_energy_low,
+           energy_high=screening_energy_high,
+           min_bad_channels=screening_min_bad_channels
+       )
+       
+       screening_summary = get_screening_summary(screening_results)
+       logger.info(f"[plot_gti] Screening summary: {screening_summary}")
+       
+       if screened_files:
+           original_count = len(final_file_paths_to_plot)
+           final_file_paths_to_plot = screened_files
+           final_gti_numbers_for_plot_func = screened_gtis
+           logger.info(f"[plot_gti] Screening reduced files from {original_count} to {len(screened_files)}")
+       else:
+           logger.warning("[plot_gti] All GTI failed screening, using original files")
+           screening_summary['all_failed'] = True
+   elif apply_screening:
+       logger.info(f"[plot_gti] Screening requested but plot type '{plot_type}' doesn't support it (only spectrum/summed_spectrum)")
 
-   if not final_file_paths_to_plot:
-       logger.error(f"[plot_gti] CRITICAL: After all checks, no files (neither specific nor default) could be selected for plotting for obs_id '{obs_id}', plot type '{plot_type}'.")
-       return JsonResponse({'error': 'No data files could be selected for plotting.'}, status=404)
-
-
-   # Calculate default binning if min_value was not explicitly provided
-   if requested_min_value_str is None or requested_min_value_str == '':
-       calculated_default = calculate_default_binning(final_file_paths_to_plot[0], plot_type)
-       min_value = calculated_default
-       logger.info(f"[plot_gti] Calculated default binning: {calculated_default}")
-
-
-   logger.info(f"[plot_gti] Calling plotting function for '{plot_type}' with: min_value={min_value}, obs_id='{obs_id}', file_paths={final_file_paths_to_plot}, gti_numbers={final_gti_numbers_for_plot_func}")
-
-
-   # Special handling for summed spectrum - use all available GTI files regardless of selection
+   # Special handling for summed spectrum — use the already-screened files
+   # from the block above.  No need to re-gather from the DB and re-screen;
+   # that threw away the user's GTI selection AND duplicated the screening work.
    if plot_type == 'summed_spectrum':
-       logger.info(f"[plot_gti] Summed spectrum detected - using all available GTI files instead of selection")
-       all_gti_files = []
-       all_gti_numbers = []
+       # final_file_paths_to_plot / final_gti_numbers_for_plot_func are
+       # already correctly set (and already screened if screening was requested).
+       logger.info(f"[plot_gti] Summed spectrum - using {len(final_file_paths_to_plot)} "
+                   f"pre-selected/screened GTI files: GTIs {final_gti_numbers_for_plot_func}")
 
-       for file_item in plot_specific_files_qs.order_by('name'):
-           file_path = os.path.join(full_dir_path_for_files, file_item.name)
-           all_gti_files.append(file_path)
-           # Extract GTI number from filename
-           gti_match = re.search(r'GTI(\d+)', file_item.name)
-           if gti_match:
-               all_gti_numbers.append(int(gti_match.group(1)))
-           else:
-               all_gti_numbers.append(0)  # fallback
-
-       final_file_paths_to_plot = all_gti_files
-       final_gti_numbers_for_plot_func = all_gti_numbers
-       logger.info(f"[plot_gti] Summed spectrum using {len(all_gti_files)} GTI files: GTIs {all_gti_numbers}")
-
-   # Special handling for HID - use all available GTI files only if no GTIs were specified
+   # Special handling for HID - use all available GTI files only if no GTI were specified
    elif use_all_hid_files:
        logger.info(f"[plot_gti] HID detected with no GTI filter - using all available GTI files by default")
        all_gti_files = []
@@ -477,31 +477,40 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
        final_gti_numbers_for_plot_func = all_gti_numbers
        logger.info(f"[plot_gti] HID using {len(all_gti_files)} GTI files: GTIs {all_gti_numbers}")
 
+   # Calculate default binning if needed
+   if requested_min_value_str is None or requested_min_value_str == '':
+       calculated_default = calculate_default_binning(final_file_paths_to_plot[0], plot_type)
+       min_value = calculated_default
+
+   logger.info(f"[plot_gti] Calling plotting function with {len(final_file_paths_to_plot)} files")
+
+   # Determine if background should be dashed (unreliable screening)
+   bg_dash = 'solid'
+   if screening_summary and screening_summary.get('all_failed'):
+       bg_dash = 'dash'
+       logger.info(f"[plot_gti] Background line will be dashed (all GTIs failed screening)")
+
    try:
-       # The plotting function expects: min_value, obs_id, data_paths (list of full paths), gti_numbers (list of ints)
-       plot_function_start = time.time()
-       logger.info(f"[plot_gti] Calling plotting function '{PLOTS[plot_type]['function'].__name__}' with:")
-       logger.info(f"[plot_gti]   - min_value: {min_value}")
-       logger.info(f"[plot_gti]   - obs_id: {obs_id}")
-       logger.info(f"[plot_gti]   - file_paths: {final_file_paths_to_plot}")
-       logger.info(f"[plot_gti]   - gti_numbers: {final_gti_numbers_for_plot_func}")
-       
-       plot_divs_html = PLOTS[plot_type]['function'](
-           min_value,
-           obs_id,
-           final_file_paths_to_plot,
-           final_gti_numbers_for_plot_func
-       )
-       plot_function_time = time.time() - plot_function_start
-       logger.info(f"[plot_gti] Successfully generated plot divs for '{plot_type}' in {plot_function_time:.3f}s.")
-       logger.info(f"[plot_gti] Plot HTML length: {len(plot_divs_html)} characters")
+       # Only spectrum types accept bg_dash (they have background traces)
+       if plot_type in ('spectrum', 'summed_spectrum'):
+           plot_divs_html = PLOTS[plot_type]['function'](
+               min_value,
+               obs_id,
+               final_file_paths_to_plot,
+               final_gti_numbers_for_plot_func,
+               bg_dash=bg_dash,
+           )
+       else:
+           plot_divs_html = PLOTS[plot_type]['function'](
+               min_value,
+               obs_id,
+               final_file_paths_to_plot,
+               final_gti_numbers_for_plot_func,
+           )
    except Exception as e:
-       logger.exception(f"[plot_gti] Error during plot generation for '{plot_type}': {e}")
+       logger.exception(f"[plot_gti] Error during plot generation: {e}")
        return JsonResponse({'error': f'Error generating plot: {str(e)}'}, status=500)
 
-   # Fix for duplicate graph issue:
-   # Always return 'time' as the plot type for HID, regardless of what was requested.
-   # This ensures the frontend updates the 'time' container.
    if plot_type == 'hardness_intensity_diagram':
        original_plot_type = 'time'
 
@@ -514,11 +523,10 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
        'plotKeyUnderscore': original_plot_type.replace('-', '_'),
    }
    
-   logger.info(f"[plot_gti] ===== BACKEND SUCCESS =====")
-   logger.info(f"[plot_gti] Returning response keys: {list(response_data.keys())}")
-   logger.info(f"[plot_gti] plotType: {response_data['plotType']}")
-   logger.info(f"[plot_gti] resolvedPlotType: {response_data['resolvedPlotType']}")
-   logger.info(f"[plot_gti] plotKeyHyphen: {response_data['plotKeyHyphen']}")
+   # Include screening summary in response
+   if screening_summary:
+       response_data['screeningSummary'] = screening_summary
+       logger.info(f"[plot_gti] Including screening summary in response: {screening_summary}")
 
    return JsonResponse(response_data)
     
@@ -555,7 +563,7 @@ def plot_data(request: HttpRequest) -> JsonResponse:
     max_gti: list[int] = []
     plot_divs: list[str] = []
     infos: list[dict[str, Any]] = []
-    default_binnings: dict[str, int] = {}  # Initialize default_binnings dictionary
+    default_binnings: dict[str, int] = {}
     obs_ids: list[dict[str, str]]
     plot_type: dict[str, Any]
     logger: log.Logger = log.getLogger(__name__)
@@ -565,6 +573,38 @@ def plot_data(request: HttpRequest) -> JsonResponse:
     files: QuerySet
     obs_items: QuerySet
 
+    # Extract screening parameters with EXTENSIVE logging
+    logger.info("=" * 80)
+    logger.info("[plot_data] *** BEGINNING SCREENING PARAMETER EXTRACTION ***")
+    logger.info(f"[plot_data] Full POST data: {dict(request.POST)}")
+    
+    apply_screening_str = request.POST.get('apply_screening', 'false')
+    logger.info(f"[plot_data] apply_screening raw string: '{apply_screening_str}' (type: {type(apply_screening_str)})")
+    
+    apply_screening = apply_screening_str.lower() == 'true'
+    logger.info(f"[plot_data] apply_screening boolean: {apply_screening} (type: {type(apply_screening)})")
+    
+    screening_energy_low = 2.0
+    screening_energy_high = 5.0
+    screening_min_bad_channels = 2
+    
+    if apply_screening:
+        logger.info("[plot_data] *** SCREENING IS ENABLED - EXTRACTING PARAMETERS ***")
+        try:
+            screening_energy_low = float(request.POST.get('screening_energy_low', 2.0))
+            screening_energy_high = float(request.POST.get('screening_energy_high', 5.0))
+            screening_min_bad_channels = int(request.POST.get('screening_min_bad_channels', 2))
+            logger.info(f"[plot_data] Extracted screening params:")
+            logger.info(f"[plot_data]   - energy_low: {screening_energy_low} keV")
+            logger.info(f"[plot_data]   - energy_high: {screening_energy_high} keV")
+            logger.info(f"[plot_data]   - min_bad_channels: {screening_min_bad_channels}")
+        except (ValueError, TypeError) as e:
+            logger.error(f"[plot_data] ERROR parsing screening params: {e}")
+            logger.info("[plot_data] Using default screening values")
+    else:
+        logger.info("[plot_data] *** SCREENING IS DISABLED ***")
+    
+    logger.info("=" * 80)
 
     if search_type == 'source' and source:
         obs_items = Item.objects.filter(
@@ -606,7 +646,6 @@ def plot_data(request: HttpRequest) -> JsonResponse:
             f"{f'source: {source}' if search_type == 'source' else f'observation ID: {obs_id}'}"
         })
 
-
     item = files.first()
     obs_info = {
         'ra': item.ra,
@@ -621,44 +660,36 @@ def plot_data(request: HttpRequest) -> JsonResponse:
         'goodx_5_12_rate': item.changegoodx_5_12_rate,
     }
 
-
     dir_path = os.path.join(settings.DATA_DIR, obs_id, 'jspipe/')
-
+    screening_summaries = {}
 
     # Try to get data for specified plots
     try:
         # Get summary files for each GTI
-        file_names = np.array(
+        file_names_summary = np.array(
             files.filter(name__contains='BGDATA.summary').values_list('name', flat=True)
         )
 
-
-        if file_names.size == 0:
+        if file_names_summary.size == 0:
             return JsonResponse({'error': 'No summary files found for the given source name'})
 
-
-        # Sort by GTI number
         indices = np.argsort(
-            [int(re.search(r'GTI(\d+)', file_name).group(1)) for file_name in file_names]
+            [int(re.search(r'GTI(\d+)', file_name).group(1)) for file_name in file_names_summary]
         )
 
-
-        # Get GTI info
         found_source = None
         available_gti = set()
-        for file_name in file_names[indices]:
+        for file_name in file_names_summary[indices]:
             gti_number = int(re.search(r'GTI(\d+)', file_name).group(1))
             available_gti.add(gti_number)
-
 
         if not available_gti:
             return JsonResponse({'error': 'No GTI data available'})
 
-
         for gti in range(max(available_gti) + 1):
             if gti not in available_gti:
                 break
-            file_name = re.sub(r'js_\d+_', f'js_{obs_id}_', file_names[indices][gti])
+            file_name = re.sub(r'js_\d+_', f'js_{obs_id}_', file_names_summary[indices][gti])
             info = np.char.replace(np.loadtxt(
                 os.path.join(dir_path, file_name),
                 dtype=str,
@@ -667,21 +698,23 @@ def plot_data(request: HttpRequest) -> JsonResponse:
             info_dict = dict(zip(*info))
             infos.append(info_dict | {'GTI': f'GTI{gti}'})
 
-
             if 'OBJECT' in info_dict and not found_source:
                 found_source = info_dict['OBJECT']
 
+        # Reset exists flags for this request (global PLOTS dict is reused across requests)
+        for _pt in PLOTS:
+            PLOTS[_pt]['exists'] = False
 
         # Plot depending on the data type
         for plot_type, plot_info in PLOTS.items():
             # Check if this plot type is requested in the POST data
             if plot_type.replace('_', '-') in request.POST:
-            # if any(html_name for html_name, plot_key in html_to_plot_type.items()
-               #    if html_name in request.POST and plot_key == plot_type):
-               logger.info(f"[plot_data] Processing plot type: {plot_type}")
+               logger.info("=" * 80)
+               logger.info(f"[plot_data] *** PROCESSING PLOT TYPE: {plot_type} ***")
                plot_info['exists'] = True
                file_names = files.filter(name__contains=plot_info['file_type'])
                file_names = file_names.exclude(name__regex=r'_BAND\d+')
+               
                if file_names:
                    max_gti.append(len(file_names))
                    
@@ -690,69 +723,168 @@ def plot_data(request: HttpRequest) -> JsonResponse:
                    first_file_path = dir_path + first_file.name
                    calculated_default = calculate_default_binning(first_file_path, plot_type)
                    default_binnings[plot_type] = calculated_default
-                   # Add hyphenated version for frontend compatibility
                    default_binnings[plot_type.replace('_', '-')] = calculated_default
                    
                    if plot_type == 'hardness_intensity_diagram':
                        default_binnings['time'] = calculated_default
 
-                   logger.info(f"[plot_data] Calculated default binning for {plot_type}: {calculated_default}")
+                   logger.info(f"[plot_data] Default binning for {plot_type}: {calculated_default}")
+                   
+                   # Prepare lists of files and GTIs
+                   all_files = []
+                   all_gtis = []
+                   for file_item in file_names.order_by('name'):
+                       all_files.append(dir_path + file_item.name)
+                       gti_match = re.search(r'GTI(\d+)', file_item.name)
+                       all_gtis.append(int(gti_match.group(1)) if gti_match else 0)
+
+                   logger.info(f"[plot_data] Total files found: {len(all_files)}")
+                   logger.info(f"[plot_data] GTI numbers: {all_gtis}")
+                   logger.info(f"[plot_data] Sample file paths: {all_files[:3]}")
+
+                   # Apply screening if requested
+                   final_files = all_files
+                   final_gtis = all_gtis
+
+                   # CRITICAL DECISION POINT
+                   logger.info("=" * 80)
+                   logger.info(f"[plot_data] *** SCREENING DECISION POINT ***")
+                   logger.info(f"[plot_data] Plot type: {plot_type}")
+                   logger.info(f"[plot_data] Apply screening flag: {apply_screening}")
+                   logger.info(f"[plot_data] Is spectrum type: {plot_type in ['spectrum', 'summed_spectrum']}")
+                   logger.info(f"[plot_data] Will apply screening: {apply_screening and plot_type in ['spectrum', 'summed_spectrum']}")
+                   
+                   if apply_screening and plot_type in ['spectrum', 'summed_spectrum']:
+                       logger.info("=" * 80)
+                       logger.info(f"[plot_data] *** APPLYING BACKGROUND SCREENING ***")
+                       logger.info(f"[plot_data] Energy range: {screening_energy_low}-{screening_energy_high} keV")
+                       logger.info(f"[plot_data] Min bad channels: {screening_min_bad_channels}")
+                       logger.info(f"[plot_data] Files to screen: {len(all_files)}")
+                       logger.info(f"[plot_data] GTIs to screen: {all_gtis}")
+                       
+                       # Log each file path
+                       for i, (fpath, gti) in enumerate(zip(all_files, all_gtis)):
+                           logger.info(f"[plot_data]   File {i+1}: GTI {gti} - {fpath}")
+                           logger.info(f"[plot_data]           Exists: {os.path.exists(fpath)}")
+                       
+                       passed_files, passed_gtis, results = screen_gti_files(
+                            all_files, all_gtis, 
+                            energy_low=screening_energy_low,
+                            energy_high=screening_energy_high,
+                            min_bad_channels=screening_min_bad_channels
+                       )
+                       
+                       logger.info("=" * 80)
+                       logger.info(f"[plot_data] *** SCREENING RESULTS ***")
+                       logger.info(f"[plot_data] Passed files: {len(passed_files)}/{len(all_files)}")
+                       logger.info(f"[plot_data] Passed GTIs: {passed_gtis}")
+                       
+                       # Log each screening result
+                       for i, result in enumerate(results):
+                           logger.info(f"[plot_data] Result {i+1}:")
+                           logger.info(f"[plot_data]   GTI: {result.get('gti_number', 'unknown')}")
+                           logger.info(f"[plot_data]   Passed: {result.get('passes', False)}")
+                           logger.info(f"[plot_data]   Reason: {result.get('reason', 'unknown')}")
+                           logger.info(f"[plot_data]   Bad channels: {result.get('bad_channel_count', 0)}/{result.get('total_channels_in_range', 0)}")
+                           logger.info(f"[plot_data]   BG file found: {result.get('bg_file_found', False)}")
+                       
+                       summary = get_screening_summary(results)
+                       screening_summaries[plot_type] = summary
+                       logger.info(f"[plot_data] Summary: {summary}")
+                       
+                       if passed_files:
+                           logger.info(f"[plot_data] *** USING SCREENED FILES ***")
+                           logger.info(f"[plot_data] Original: {len(all_files)} files")
+                           logger.info(f"[plot_data] After screening: {len(passed_files)} files")
+                           final_files = passed_files
+                           final_gtis = passed_gtis
+                       else:
+                           logger.warning("[plot_data] *** ALL GTIs FAILED SCREENING - USING ORIGINAL ***")
+                           summary['all_failed'] = True
+                   else:
+                       logger.info(f"[plot_data] *** SCREENING NOT APPLIED ***")
+                       if not apply_screening:
+                           logger.info(f"[plot_data] Reason: Screening disabled")
+                       elif plot_type not in ['spectrum', 'summed_spectrum']:
+                           logger.info(f"[plot_data] Reason: Plot type '{plot_type}' doesn't support screening")
+
+                   # Determine whether screening deemed the background
+                   # unreliable (all GTIs failed).  If so, we still plot the
+                   # unscreened data but show the background line dashed.
+                   bg_dash = 'solid'
+                   if (plot_type in screening_summaries
+                           and screening_summaries[plot_type].get('all_failed')):
+                       bg_dash = 'dash'
+                       logger.info(f"[plot_data] Background line will be dashed (all GTIs failed screening)")
+
+                   logger.info("=" * 80)
+                   logger.info(f"[plot_data] *** CALLING PLOT FUNCTION ***")
+                   logger.info(f"[plot_data] Final files to plot: {len(final_files)}")
+                   logger.info(f"[plot_data] Final GTIs to plot: {final_gtis}")
                    
                    plot_function_start = time.time()
                    
-                   # Special handling for summed spectrum - include all GTI files
+                   # Special handling for summed spectrum - include all valid GTI files
                    if plot_type == 'summed_spectrum':
-                       # Get all GTI files for summed spectrum
-                       all_file_paths = []
-                       all_gti_numbers = []
-
-
-                       for file_item in file_names.order_by('name'):
-                           all_file_paths.append(dir_path + file_item.name)
-                           # Extract GTI number from filename
-                           gti_match = re.search(r'GTI(\d+)', file_item.name)
-                           if gti_match:
-                               all_gti_numbers.append(int(gti_match.group(1)))
-                           else:
-                               all_gti_numbers.append(0)  # fallback
-
-
-                       logger.info(f"[plot_data] Summed spectrum using {len(all_file_paths)} GTI files: GTIs {all_gti_numbers}")
-
-
+                       logger.info(f"[plot_data] Calling summed_spectrum with {len(final_files)} files")
                        plot_div = plot_info['function'](
-                           calculated_default,  # Use calculated default
+                           calculated_default,
                            obs_id,
-                           all_file_paths,
-                           all_gti_numbers,
+                           final_files,
+                           final_gtis,
+                           bg_dash=bg_dash,
                        )
+                   elif plot_type == 'spectrum':
+                       # Spectrum: use first valid file only, pass bg_dash
+                       if final_files:
+                            file_name_to_plot = final_files[0]
+                            gti_to_plot = final_gtis[0]
+                            logger.info(f"[plot_data] Calling spectrum with 1 file: {file_name_to_plot}")
+                            plot_div = plot_info['function'](
+                                calculated_default,
+                                obs_id,
+                                [file_name_to_plot],
+                                [gti_to_plot],
+                                bg_dash=bg_dash,
+                            )
+                       else:
+                            logger.error(f"[plot_data] ERROR: No files available for spectrum")
+                            continue
                    else:
-                       # Regular handling for other plot types - use first file only
-                       file_name = file_names.first().name
-                       logger.info(f"[plot_data] Calling {plot_type} function with file: {file_name}")
-                       plot_div = plot_info['function'](
-                           calculated_default,  # Use calculated default
-                           obs_id,
-                           [dir_path + file_name],
-                           [0],
-                       )
-
+                       # Regular handling for other plot types - use first valid file only
+                       if final_files:
+                            file_name_to_plot = final_files[0]
+                            gti_to_plot = final_gtis[0]
+                            logger.info(f"[plot_data] Calling {plot_type} with 1 file: {file_name_to_plot}")
+                            plot_div = plot_info['function'](
+                                calculated_default,
+                                obs_id,
+                                [file_name_to_plot],
+                                [gti_to_plot],
+                            )
+                       else:
+                            logger.error(f"[plot_data] ERROR: No files available for {plot_type}")
+                            continue
 
                    plot_function_time = time.time() - plot_function_start
-                   logger.info(f"[plot_data] {plot_type} function completed in {plot_function_time:.3f}s")
-
+                   logger.info(f"[plot_data] Plot function completed in {plot_function_time:.3f}s")
+                   logger.info("=" * 80)
 
                    plot_divs.append(plot_div)
                else:
                    logger.warning(f"[plot_data] No files found for plot type: {plot_type}")
                    max_gti.append(0)
 
-
     except AttributeError as error:
         logger.error(f'{error}\nNo valid data in {dir_path}')
         return JsonResponse({'error': f'Error processing data: {str(error)}'})
 
-    logger.info(f"[plot_data] Returning defaultBinnings: {default_binnings}")
+    logger.info("=" * 80)
+    logger.info(f"[plot_data] *** FINAL RESPONSE ***")
+    logger.info(f"[plot_data] Plots generated: {len(plot_divs)}")
+    logger.info(f"[plot_data] Screening summaries: {screening_summaries}")
+    logger.info(f"[plot_data] Default binnings: {default_binnings}")
+    logger.info("=" * 80)
 
     return JsonResponse({
         'plotDivs': plot_divs,
@@ -768,6 +900,7 @@ def plot_data(request: HttpRequest) -> JsonResponse:
         'source': found_source or source,
         'obs_info': obs_info,
         'defaultBinnings': default_binnings,
+        'screeningSummaries': screening_summaries,
     })
 
 

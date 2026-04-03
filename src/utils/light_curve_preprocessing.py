@@ -59,7 +59,13 @@ def light_curve_data(
     counts *= time_diff
 
     # Bin data
-    min_bins = min_bin(min_value, counts)
+    # Treat min_value as binning factor (combine N bins)
+    bin_factor = int(min_value) if min_value > 0 else 1
+    min_bins = np.arange(0, len(counts), bin_factor)
+    if min_bins[-1] != len(counts):
+        min_bins = np.append(min_bins, len(counts))
+    min_bins = np.unique(min_bins)
+
     (y_bin, bg_bin, x_bin), x_width, uncertainty = binning(
         min_bins,
         np.stack((counts[:len(background)], background[:len(time)], time[:len(background)])),
@@ -248,7 +254,17 @@ def light_curve_plot(
     x_error = [datum / 3600 / 24 for datum in x_error]
 
     for i, x_datum in enumerate(x_data[1:]):
-        if x_datum[0] - x_data[i][-1] > 10 * max(np.diff(x_datum)):
+        # x_datum is x_data[i+1]
+        
+        # Robust bin width detection using x_error (half-width)
+        current_x_errors = x_error[i + 1]
+        if len(current_x_errors) > 0:
+            max_bin_width = 2 * np.max(current_x_errors)
+        else:
+            # Fallback if errors are empty (unlikely)
+            max_bin_width = 0
+
+        if max_bin_width > 0 and x_datum[0] - x_data[i][-1] > 10 * max_bin_width:
             subplot_kwargs.append({'row': 1, 'col': subplot_kwargs[-1]['col'] + 1})
         else:
             subplot_kwargs.append({'row': 1, 'col': subplot_kwargs[-1]['col']})

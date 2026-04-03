@@ -4,10 +4,218 @@ Functions to plot graphs
 import logging
 from typing import Any
 
+import numpy as np
 import plotly.graph_objs as go
 from numpy import ndarray
 from plotly.offline import plot
 from plotly.colors import qualitative
+
+# Minimum value for log scale plotting to prevent extreme drops
+LOG_SCALE_MIN_VALUE = 1e-10
+
+
+def clip_for_log_scale(data: ndarray, min_value: float = LOG_SCALE_MIN_VALUE) -> ndarray:
+    """
+    Clips data values to a minimum threshold for safe log scale plotting.
+    Prevents values like 0 or near-zero from causing extreme drops on log scale.
+    
+    Parameters
+    ----------
+    data : ndarray
+        Array of values to clip
+    min_value : float, default = 1e-10
+        Minimum value threshold
+    
+    Returns
+    -------
+    ndarray
+        Array with values clipped to minimum threshold
+    """
+    if data is None:
+        return None
+    data = np.asarray(data, dtype=float)
+    # Replace zeros, negative values, and non-finite values with min_value
+    clipped = np.where((data <= 0) | ~np.isfinite(data), min_value, data)
+    # Also clip very small positive values
+    clipped = np.maximum(clipped, min_value)
+    return clipped
+
+
+def compute_adaptive_log_y_range(
+        y_series: list[ndarray | None],
+        bg_series: list[ndarray | None] | None = None,
+        min_value: float = LOG_SCALE_MIN_VALUE,
+) -> list[float] | None:
+    """
+    Compute an adaptive log10 y-axis range.
+
+    Goal:
+    - Avoid letting a few near-zero / clipped points force the lower axis bound
+      to very small values (e.g. 1e-10) and compress the useful part.
+    - Preserve truly broad intrinsic dynamic range when the full distribution
+      supports it.
+
+    Strategy:
+    1. Gather all finite positive y/background values.
+    2. Compute raw dynamic range from min positive to max.
+    3. If raw dynamic range is extreme, test whether this is driven by a tiny
+       low-value tail using a robust lower percentile.
+    4. Use robust lower bound only when it substantially reduces range while
+       still capturing the bulk. Otherwise keep full range.
+    """
+    source_values: list[np.ndarray] = []
+    bg_values: list[np.ndarray] = []
+
+    for series in y_series:
+        if series is None:
+            continue
+        arr = np.asarray(series, dtype=float)
+        valid = arr[np.isfinite(arr) & (arr > 0)]
+        if valid.size:
+            source_values.append(valid)
+
+    if not source_values:
+        return None
+
+    if bg_series is not None:
+        for series in bg_series:
+            if series is None:
+                continue
+            arr = np.asarray(series, dtype=float)
+            valid = arr[np.isfinite(arr) & (arr > 0)]
+            if valid.size:
+                bg_values.append(valid)
+
+    src_all = np.concatenate(source_values)
+    if src_all.size == 0:
+        return None
+
+    max_source = float(np.max(src_all))
+    max_bg = float(np.max(np.concatenate(bg_values))) if bg_values else -np.inf
+    max_y = max(max_source, max_bg)
+
+    min_y = float(max(np.min(src_all), min_value))
+
+    if max_y <= 0 or min_y <= 0:
+        return None
+
+    raw_dynamic = max_source / min_y
+
+    # Default lower bound is the true minimum positive value.
+    lower = min_y
+
+    # Tail-trimming rule based on source distribution only:
+    # if the lowest tail extends far below the main body, trim to p5.
+    if src_all.size >= 20 and raw_dynamic > 1e3:
+        p5 = float(max(np.percentile(src_all, 5), min_value))
+        p95 = float(max(np.percentile(src_all, 95), min_value))
+
+        if p95 > p5 > 0:
+            core_decades = np.log10(p95 / p5)
+            raw_decades = np.log10(raw_dynamic)
+            # Large gap between raw and core range means a runaway lower tail.
+            if raw_decades - core_decades >= 1.5:
+                lower = p5
+
+    # Padding in log-space
+    log_min = np.log10(max(lower, min_value)) - 0.35
+    log_max = np.log10(max_y) + 0.25
+
+    # Guardrails
+    log_min = max(log_min, -10)
+    if log_max <= log_min:
+        log_max = log_min + 1.0
+
+    return [float(log_min), float(log_max)]
+
+
+def handle_log_scale_uncertainties(
+        y_data: ndarray,
+        y_uncertainty: ndarray,
+        min_value: float = LOG_SCALE_MIN_VALUE
+) -> tuple[ndarray, ndarray, ndarray, ndarray, ndarray, ndarray]:
+    """
+    Handle uncertainties for log scale plots, classifying each point into one
+    of three categories:
+
+    1. **Upper limit** (``net_negative``):  The background-subtracted value is
+       non-positive (``y ≤ 0``).  These points cannot be placed on a log axis,
+       so we show a downward arrow at the 1σ upper bound ``y + σ``.
+
+    2. **Unconstrained lower bound** (``unconstrained_low``):  The data point
+       is positive, but its lower 1σ error bar reaches zero or below
+       (``y − σ ≤ 0`` while ``y > 0``).  We keep the data point and its upper
+       error bar, but replace the lower error bar with a short downward-arrow
+       marker to indicate the lower bound is unconstrained.
+
+    3. **Normal detection**: Both the value and its 1σ bounds are positive.
+       Standard symmetric error bars are shown.
+
+    Points whose upper bound is also non-positive (``y + σ ≤ 0``) are entirely
+    invalid on a log axis and are removed.
+
+    Parameters
+    ----------
+    y_data : ndarray
+        Y-axis measured values (background-subtracted net rates).
+    y_uncertainty : ndarray
+        Y-axis 1σ uncertainties (symmetric).
+    min_value : float, default = 1e-10
+        Minimum value for log scale.
+
+    Returns
+    -------
+    tuple of six ndarrays
+        valid_mask               – True for every point that should be displayed.
+        upper_limit_mask         – True for net-negative upper-limit points.
+        unconstrained_low_mask   – True for positive points whose lower error
+                                   bar is unconstrained.
+        y_error_plus             – Upper error bars (zero for upper-limit points).
+        y_error_minus            – Lower error bars (zero for ULs; clipped for
+                                   unconstrained-low so bar stops at min_value).
+        upper_limit_y_values     – Y-values for upper-limit arrows (y + σ).
+    """
+    y_data = np.asarray(y_data, dtype=float)
+    y_uncertainty = np.asarray(y_uncertainty, dtype=float)
+
+    # 1σ bounds
+    y_lower = y_data - y_uncertainty
+    y_upper = y_data + y_uncertainty
+
+    # Completely invalid: even the upper bound is non-positive
+    invalid_mask = (y_upper <= 0) | ~np.isfinite(y_data) | ~np.isfinite(y_uncertainty)
+    valid_mask = ~invalid_mask
+
+    # --- Category 1: Upper limit  (net value ≤ 0) --------------------------
+    upper_limit_mask = (y_data <= 0) & valid_mask
+
+    # --- Category 2: Unconstrained lower bound  (y > 0, y − σ ≤ 0) ---------
+    unconstrained_low_mask = (y_data > 0) & (y_lower <= 0) & valid_mask
+
+    # --- Error bars ---------------------------------------------------------
+    y_error_plus = y_uncertainty.copy()
+    y_error_minus = y_uncertainty.copy()
+
+    # Upper-limit points: no error bars (drawn as arrows instead)
+    if np.any(upper_limit_mask):
+        y_error_plus[upper_limit_mask] = 0
+        y_error_minus[upper_limit_mask] = 0
+
+    # Unconstrained-low points: keep upper bar; clip lower bar so it stops
+    # just above the log-scale minimum (the visual "line + arrow" marker is
+    # added separately in data_plot).
+    if np.any(unconstrained_low_mask):
+        # Lower error bar = distance from y down to min_value (the axis floor)
+        y_error_minus[unconstrained_low_mask] = np.maximum(
+            y_data[unconstrained_low_mask] - min_value, 0
+        )
+
+    # Arrow placement for upper limits: 1σ upper bound
+    upper_limit_y_values = np.where(upper_limit_mask, y_upper, y_data)
+
+    return (valid_mask, upper_limit_mask, unconstrained_low_mask,
+            y_error_plus, y_error_minus, upper_limit_y_values)
+
 
 def data_plot(
         plot_type: str = 'markers',
@@ -72,8 +280,19 @@ def data_plot(
     layout_kwargs = layout_kwargs or {}
     fig = fig or go.Figure()
 
+    # Extract bg_dash early so it doesn't leak into go.Scatter kwargs
+    bg_dash = plot_kwargs.pop('bg_dash', 'solid')
+
     if not gti_numbers:
         gti_numbers = [0]
+
+    # Check if y-axis is using log scale
+    y_axis_type = layout_kwargs.get('yaxis', {}).get('type', 'linear')
+    is_log_scale = y_axis_type == 'log'
+    
+    # Also check yaxis_type directly (some code may pass it this way)
+    if 'yaxis_type' in layout_kwargs and layout_kwargs['yaxis_type'] == 'log':
+        is_log_scale = True
 
     # Ensure all data lists have the same length
     data_lists = [
@@ -109,21 +328,112 @@ def data_plot(
             logger.warning(f"Missing data for GTI {number}. Skipping.")
             continue
 
+        # Convert to numpy arrays
+        x_data = np.asarray(x_data)
+        y_data = np.asarray(y_data)
+        
+        # Handle log scale special cases
+        upper_limit_mask = None
+        unconstrained_low_mask = None
+        upper_limit_y_values = None
+        y_error_plus = None
+        y_error_minus = None
+        
+        if is_log_scale:
+            if y_uncertainty is not None:
+                y_uncertainty = np.asarray(y_uncertainty)
+                (
+                    valid_mask,
+                    upper_limit_mask,
+                    unconstrained_low_mask,
+                    y_error_plus,
+                    y_error_minus,
+                    upper_limit_y_values,
+                ) = handle_log_scale_uncertainties(y_data, y_uncertainty)
+                
+                # Filter out invalid points
+                if not np.all(valid_mask):
+                    logger.info(f"GTI {number}: Removing {np.sum(~valid_mask)} invalid points for log scale")
+                    x_data = x_data[valid_mask]
+                    y_data = y_data[valid_mask]
+                    y_error_plus = y_error_plus[valid_mask]
+                    y_error_minus = y_error_minus[valid_mask]
+                    upper_limit_mask = upper_limit_mask[valid_mask]
+                    unconstrained_low_mask = unconstrained_low_mask[valid_mask]
+                    upper_limit_y_values = upper_limit_y_values[valid_mask]
+                    if x_error is not None:
+                        x_error = np.asarray(x_error)[valid_mask]
+                
+                # Log upper limits info
+                if np.any(upper_limit_mask):
+                    logger.info(f"GTI {number}: {np.sum(upper_limit_mask)} points are upper limits (down arrows)")
+                if np.any(unconstrained_low_mask):
+                    logger.info(f"GTI {number}: {np.sum(unconstrained_low_mask)} points have unconstrained lower bounds")
+            
+            # Clip y_data for log scale
+            y_data = clip_for_log_scale(y_data)
+            if upper_limit_y_values is not None:
+                upper_limit_y_values = clip_for_log_scale(upper_limit_y_values)
+            if background is not None:
+                background = clip_for_log_scale(np.asarray(background))
+
+        # ---- Separate detections, upper limits, and unconstrained-low ----
+        has_upper_limits = (
+            upper_limit_mask is not None and np.any(upper_limit_mask)
+        )
+        has_unconstrained_low = (
+            unconstrained_low_mask is not None and np.any(unconstrained_low_mask)
+        )
+
+        if has_upper_limits:
+            # "detection" = everything that is NOT an upper limit (includes
+            # unconstrained-low points – they are still plotted as data points)
+            det = ~upper_limit_mask
+            ul  = upper_limit_mask
+
+            det_x       = x_data[det]
+            det_y       = y_data[det]
+            det_x_err   = x_error[det] if x_error is not None else None
+            det_y_err_p = y_error_plus[det]
+            det_y_err_m = y_error_minus[det]
+
+            ul_x       = x_data[ul]
+            ul_y       = upper_limit_y_values[ul]
+            ul_x_err   = x_error[ul] if x_error is not None else None
+        else:
+            det_x       = x_data
+            det_y       = y_data
+            det_x_err   = x_error
+            det_y_err_p = y_error_plus
+            det_y_err_m = y_error_minus
+
+        # Build trace kwargs (detections + unconstrained-low; ULs are separate)
         trace_kwargs = {
-            'x': x_data,
-            'y': y_data,
+            'x': det_x,
+            'y': det_y,
             'mode': plot_type,
             'name': label,
-            'opacity': 1.0,  # Default opacity
+            'opacity': 1.0,
             'line': {'color': color},
-            'marker': {'color': color, 'opacity': 1.0},  # Default marker opacity
+            'marker': {'color': color, 'opacity': 1.0},
             'legendgroup': number,
         }
 
-        if x_error is not None:
-            trace_kwargs['error_x'] = {'type': 'data', 'array': x_error, 'visible': True}
+        if det_x_err is not None:
+            trace_kwargs['error_x'] = {'type': 'data', 'array': det_x_err, 'visible': True}
+        
+        # Handle y uncertainties for detection points
         if y_uncertainty is not None:
-            trace_kwargs['error_y'] = {'type': 'data', 'array': y_uncertainty, 'visible': True}
+            if is_log_scale and det_y_err_p is not None and det_y_err_m is not None:
+                trace_kwargs['error_y'] = {
+                    'type': 'data',
+                    'array': det_y_err_p,
+                    'arrayminus': det_y_err_m,
+                    'visible': True
+                }
+            else:
+                y_uncertainty = np.asarray(y_uncertainty, dtype=float)
+                trace_kwargs['error_y'] = {'type': 'data', 'array': y_uncertainty, 'visible': True}
 
         # For scatter plots with color data
         if color_data is not None and len(x_data_list) == 1:
@@ -135,16 +445,70 @@ def data_plot(
                     'colorscale': 'Viridis',
                     'colorbar': {'title': layout_kwargs.get('colorbar_title', 'Time')},
                     'showscale': True,
-                    'opacity': 1.0  # Default marker opacity
+                    'opacity': 1.0
                 }
             })
 
-        # Update with any additional plot-specific kwargs
         trace_kwargs.update(plot_kwargs)
-
         fig.add_trace(go.Scatter(**trace_kwargs), **subplot_kwargs or {})
+        
+        # ---- Upper-limit arrows (net-negative: down arrow at y + σ) --------
+        if has_upper_limits:
+            ul_trace_kwargs = {
+                'x': ul_x,
+                'y': ul_y,
+                'mode': 'markers',
+                'name': f'{label} (upper limits)',
+                'marker': {
+                    'symbol': 'arrow-down',
+                    'size': 12,
+                    'color': color,
+                    'line': {'width': 1, 'color': 'black'},
+                    'standoff': 0,
+                },
+                'legendgroup': number,
+                'showlegend': False,
+            }
+            if ul_x_err is not None:
+                ul_trace_kwargs['error_x'] = {
+                    'type': 'data', 'array': ul_x_err, 'visible': True
+                }
+            fig.add_trace(go.Scatter(**ul_trace_kwargs), **subplot_kwargs or {})
 
-        # Add background trace if provided
+        # ---- Unconstrained-low markers (positive point, lower bar → 0) -----
+        # Small downward arrow just below the data point to indicate
+        # "lower bound is unconstrained".
+        if has_unconstrained_low:
+            # Subset: only unconstrained-low among the detection indices
+            if has_upper_limits:
+                # unconstrained_low_mask aligned to original arrays; need to
+                # re-index after removing ULs (det mask).
+                ucl_in_det = unconstrained_low_mask[~upper_limit_mask]
+            else:
+                ucl_in_det = unconstrained_low_mask
+
+            ucl_x = det_x[ucl_in_det]
+            ucl_y = det_y[ucl_in_det]
+
+            fig.add_trace(go.Scatter(
+                x=ucl_x,
+                y=ucl_y * 0.7,          # place marker slightly below the point
+                mode='markers',
+                name=f'{label} (unconstrained low)',
+                marker={
+                    'symbol': 'arrow-down',
+                    'size': 8,
+                    'color': color,
+                    'line': {'width': 1, 'color': color},
+                    'standoff': 0,
+                },
+                legendgroup=number,
+                showlegend=False,
+                hovertext='Lower bound unconstrained',
+                hoverinfo='text+x+y',
+            ), **subplot_kwargs or {})
+
+        # ---- Background trace ----------------------------------------------
         if x_background is not None and background is not None:
             fig.add_trace(go.Scatter(
                 x=x_background,
@@ -152,9 +516,23 @@ def data_plot(
                 mode='lines',
                 name=f'{label} BG',
                 opacity=0.8,
-                line={'color': color},
+                line={'color': color, 'dash': bg_dash},
                 legendgroup=number,
             ), **subplot_kwargs or {})
+
+    # Set sensible y-axis range for log scale if not already specified
+    if is_log_scale:
+        yaxis_config = layout_kwargs.get('yaxis', {})
+        if 'range' not in yaxis_config:
+            adaptive_range = compute_adaptive_log_y_range(
+                y_series=data_lists[1],
+                bg_series=data_lists[5],
+                min_value=LOG_SCALE_MIN_VALUE,
+            )
+
+            if adaptive_range is not None:
+                yaxis_config['range'] = adaptive_range
+                layout_kwargs['yaxis'] = yaxis_config
 
     fig.update_layout(**layout_kwargs)
 

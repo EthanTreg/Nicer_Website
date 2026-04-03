@@ -15,6 +15,49 @@ import {
   clearOperationsByPattern,
 } from './statusBar.js';
 
+/**
+ * Highlight GTI rows in the observation info table that failed screening.
+ * Adds a CSS class and a small badge so the user knows why a GTI is missing
+ * from the plot.
+ *
+ * @param {string} obsID           Observation ID
+ * @param {number[]} failedGTIs    GTI numbers that failed screening
+ */
+export function flagScreenedGTIs(obsID, failedGTIs) {
+  if (!failedGTIs || failedGTIs.length === 0) return;
+
+  const $table = $(`.gti-table[data-obs-id="${obsID}"]`);
+  if ($table.length === 0) {
+    console.log(`[Screening] No GTI table found for obs ${obsID} — skipping flagging`);
+    return;
+  }
+
+  // Clear any previous screening flags
+  $table.find('.gti-row').removeClass('screening-failed');
+  $table.find('.screening-badge').remove();
+
+  failedGTIs.forEach((gtiNum) => {
+    const $row = $table.find(`.gti-row[data-gti="GTI${gtiNum}"]`);
+    if ($row.length) {
+      $row.addClass('screening-failed');
+      // Add a small "BG FAIL" badge in the first data cell (after the checkbox)
+      const $firstDataCell = $row.find('td').eq(1);
+      if ($firstDataCell.length && $firstDataCell.find('.screening-badge').length === 0) {
+        $firstDataCell.append(
+          $('<span>', {
+            class: 'screening-badge failed',
+            text: 'BG FAIL',
+            title: 'Background dominates source in this GTI — excluded from spectrum plots',
+          })
+        );
+      }
+      // Uncheck the checkbox so the user sees it is deselected
+      $row.find('.gti-checkbox').prop('checked', false);
+      console.log(`[Screening] Flagged GTI${gtiNum} as failed in table for obs ${obsID}`);
+    }
+  });
+}
+
 // expand GTI ranges (e.g., "0-2" -> ["0", "1", "2"])
 function expandGTIRange(gtiInputList) {
   const expanded = new Set();
@@ -459,6 +502,70 @@ function showGTIPlotSelectionPopup(obsID, selectedGTIs) {
       .plot-submit-btn:hover {
         background-color: #555555;
       }
+      
+      .screening-section {
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid #ddd;
+      }
+      
+      .screening-toggle-container {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      
+      .screening-toggle-container input[type="checkbox"] {
+        margin-right: 10px;
+        width: 18px;
+        height: 18px;
+      }
+      
+      .screening-toggle-container label {
+        font-size: 14px;
+        cursor: pointer;
+        color: #333;
+        font-weight: bold;
+      }
+      
+      .screening-options {
+        display: none;
+        padding: 10px;
+        background: #e9e9e9;
+        border-radius: 4px;
+        margin-top: 10px;
+      }
+      
+      .screening-options.visible {
+        display: block;
+      }
+      
+      .screening-option-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 8px;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      
+      .screening-option-row label {
+        font-size: 12px;
+        min-width: 120px;
+      }
+      
+      .screening-option-row input {
+        width: 70px;
+        padding: 4px 6px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+      }
+      
+      .screening-info {
+        font-size: 11px;
+        color: #666;
+        margin-top: 8px;
+        font-style: italic;
+      }
     `;
     const styleSheet = document.createElement('style');
     styleSheet.id = 'popup-styles';
@@ -542,13 +649,13 @@ function showGTIPlotSelectionPopup(obsID, selectedGTIs) {
 
     const $checkbox = $('<input>', {
       type: 'checkbox',
-      id: `${type.id}-checkbox`,
+      id: `gti-${type.id}-checkbox`,
       name: type.id,
       value: 'on',
     });
 
     const $label = $('<label>', {
-      for: `${type.id}-checkbox`,
+      for: `gti-${type.id}-checkbox`,
       text: type.name,
     });
 
@@ -573,6 +680,100 @@ function showGTIPlotSelectionPopup(obsID, selectedGTIs) {
     }),
   );
 
+  // Add Background Screening Section
+  const $screeningSection = $('<div>', {
+    class: 'screening-section',
+  });
+
+  const $screeningToggleContainer = $('<div>', {
+    class: 'screening-toggle-container',
+  });
+
+  const $screeningCheckbox = $('<input>', {
+    type: 'checkbox',
+    id: 'gti-apply-screening-checkbox',
+    name: 'apply_screening',
+    value: 'true',
+  });
+
+  const $screeningLabel = $('<label>', {
+    for: 'gti-apply-screening-checkbox',
+    text: 'Enable Background Screening',
+    title: 'Filter out GTIs where background dominates the source signal',
+  });
+
+  $screeningToggleContainer.append($screeningCheckbox, $screeningLabel);
+  $screeningSection.append($screeningToggleContainer);
+
+  // Screening options (hidden by default)
+  const $screeningOptions = $('<div>', {
+    class: 'screening-options',
+    id: 'gti-screening-options',
+  });
+
+  // Energy Low
+  const $energyLowRow = $('<div>', { class: 'screening-option-row' });
+  $energyLowRow.append(
+    $('<label>', { text: 'Energy Low (keV):' }),
+    $('<input>', {
+      type: 'number',
+      name: 'screening_energy_low',
+      value: 2.0,
+      step: 0.1,
+      min: 0.3,
+      max: 10,
+    }),
+  );
+  $screeningOptions.append($energyLowRow);
+
+  // Energy High
+  const $energyHighRow = $('<div>', { class: 'screening-option-row' });
+  $energyHighRow.append(
+    $('<label>', { text: 'Energy High (keV):' }),
+    $('<input>', {
+      type: 'number',
+      name: 'screening_energy_high',
+      value: 5.0,
+      step: 0.1,
+      min: 0.3,
+      max: 12,
+    }),
+  );
+  $screeningOptions.append($energyHighRow);
+
+  // Min Bad Channels
+  const $minBadRow = $('<div>', { class: 'screening-option-row' });
+  $minBadRow.append(
+    $('<label>', { text: 'Min Bad Channels:' }),
+    $('<input>', {
+      type: 'number',
+      name: 'screening_min_bad_channels',
+      value: 2,
+      min: 1,
+      max: 100,
+    }),
+  );
+  $screeningOptions.append($minBadRow);
+
+  // Info text
+  const $screeningInfo = $('<div>', {
+    class: 'screening-info',
+    text: 'GTIs where background dominates in 2+ channels within the energy range will be excluded from spectrum plots.',
+  });
+  $screeningOptions.append($screeningInfo);
+
+  $screeningSection.append($screeningOptions);
+  $form.append($screeningSection);
+
+  // Toggle screening options visibility
+  $screeningCheckbox.on('change', function () {
+    if ($(this).is(':checked')) {
+      $screeningOptions.addClass('visible');
+    } else {
+      $screeningOptions.removeClass('visible');
+    }
+  });
+
   // Add submit button
   const $submitBtn = $('<button>', {
     type: 'submit',
@@ -587,16 +788,22 @@ function showGTIPlotSelectionPopup(obsID, selectedGTIs) {
     event.preventDefault();
     $popup.fadeOut(200);
 
-    // Get selected plot types
+    // Get selected plot types (exclude screening checkbox)
     const selectedPlotTypes = [];
-    $form.find('input[type="checkbox"]:checked').each(function () {
-      selectedPlotTypes.push($(this).attr('id').replace('-checkbox', ''));
+    $form.find('input[type="checkbox"]:checked').not('#gti-apply-screening-checkbox').each(function () {
+      selectedPlotTypes.push($(this).attr('id').replace('gti-', '').replace('-checkbox', ''));
     });
 
     if (selectedPlotTypes.length === 0) {
       alert('Please select at least one plot type');
       return;
     }
+
+    // Get screening parameters
+    const applyScreening = $('#gti-apply-screening-checkbox').is(':checked');
+    const screeningEnergyLow = $form.find('input[name="screening_energy_low"]').val();
+    const screeningEnergyHigh = $form.find('input[name="screening_energy_high"]').val();
+    const screeningMinBadChannels = $form.find('input[name="screening_min_bad_channels"]').val();
 
     // Create operation IDs for each plot type
     const operationIds = selectedPlotTypes.map((plotType) => {
@@ -623,6 +830,14 @@ function showGTIPlotSelectionPopup(obsID, selectedGTIs) {
         $("input[name='csrfmiddlewaretoken']").val(),
       );
       formData.append('quality', $('#quality-select').val().toLowerCase());
+
+      // Add screening parameters if enabled
+      if (applyScreening) {
+        formData.append('apply_screening', 'true');
+        formData.append('screening_energy_low', screeningEnergyLow);
+        formData.append('screening_energy_high', screeningEnergyHigh);
+        formData.append('screening_min_bad_channels', screeningMinBadChannels);
+      }
 
       return $.ajax({
         type: 'POST',
@@ -654,7 +869,6 @@ function showGTIPlotSelectionPopup(obsID, selectedGTIs) {
           if (response.plotDivs && response.plotDivs.length > 0) {
             const plotID = plotType + '-' + obsID;
 
-            // Create plot section if it doesn't exist
             let $section = $('#' + plotType + '-section');
             if (!$section.length) {
               $section = $('<div>', {
@@ -672,7 +886,6 @@ function showGTIPlotSelectionPopup(obsID, selectedGTIs) {
               $('#plots').append($section);
             }
 
-            // Create or update plot container
             let $plotContainer = $('#' + plotID);
             if (!$plotContainer.length) {
               $plotContainer = $('<div>', {
@@ -683,6 +896,26 @@ function showGTIPlotSelectionPopup(obsID, selectedGTIs) {
             }
 
             $plotContainer.html(response.plotDivs[0]);
+            
+            // Show screening summary if available
+            if (response.screeningSummary) {
+              const summary = response.screeningSummary;
+              if (summary.all_failed) {
+                console.warn(`[Screening] ALL GTIs failed screening — showing unscreened data`);
+                let $note = $('<div>', {
+                  class: 'screening-warning',
+                  css: { padding: '8px 12px', background: '#d9534f', color: '#fff',
+                         borderRadius: '4px', marginBottom: '8px', fontSize: '13px' },
+                  html: '<strong>⚠ Screening:</strong> All GTIs failed background screening. Showing unscreened data.',
+                });
+                $plotContainer.prepend($note);
+              } else if (summary.failed_gtis > 0) {
+                console.log(`[Screening] ${summary.failed_gtis} GTIs failed screening: ${summary.failed_gti_numbers.join(', ')}`);
+              }
+              // Flag failed GTIs in the observation info table
+              flagScreenedGTIs(obsID, summary.failed_gti_numbers);
+            }
+            
             completeOperation(
               operationId,
               plotType.replace(/-/g, ' ') + ' plot generated successfully',
@@ -695,23 +928,19 @@ function showGTIPlotSelectionPopup(obsID, selectedGTIs) {
           }
         });
 
-        // Typeset any math expressions
         MathJax.typeset();
 
-        // Update synchronized selections after all plots are updated
         setTimeout(() => {
           console.log(
             'Reinitializing synchronized selection after GTI plot updates',
           );
           initSynchronizedSelection();
           updateAllSelections();
-          // Initialize interactive linking
           initInteractiveLinking();
         }, 500);
       })
       .catch((error) => {
         console.error('Error fetching GTI plots:', error);
-        // Mark all operations as failed
         operationIds.forEach((operationId) => {
           errorOperation(operationId, 'Error generating GTI plots');
         });
@@ -939,6 +1168,69 @@ export function fetchGTIPlot(event) {
         console.log(
           `[DEBUG gtiPlots.js updatePlot] AJAX success for ${currentPlotType}`,
         );
+
+        // Display screening summary if available
+        if (data.screeningSummary) {
+          const summary = data.screeningSummary;
+          console.log('[Screening Result]', summary);
+          
+          if (summary.screening_applied) {
+            const allFailed = !!summary.all_failed;
+            const message = allFailed
+              ? `Background screening: ALL ${summary.total_gtis} GTIs failed — showing unscreened data`
+              : summary.failed_gtis > 0
+                ? `Background screening: ${summary.passed_gtis}/${summary.total_gtis} GTIs passed. Excluded GTIs: ${summary.failed_gti_numbers.join(', ')}`
+                : `Background screening: All ${summary.total_gtis} GTIs passed.`;
+            
+            console.log(`[Screening] ${message}`);
+            
+            // Show a brief notification to the user
+            if (summary.failed_gtis > 0) {
+              // Create or update screening notification
+              let $notification = $('#screening-notification');
+              if ($notification.length === 0) {
+                $notification = $('<div>', {
+                  id: 'screening-notification',
+                  class: 'screening-notification',
+                  css: {
+                    position: 'fixed',
+                    bottom: '20px',
+                    right: '20px',
+                    padding: '15px 20px',
+                    background: allFailed ? '#d9534f' : '#f0ad4e',
+                    color: allFailed ? '#fff' : '#000',
+                    borderRadius: '5px',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+                    zIndex: 9999,
+                    maxWidth: '400px',
+                    fontSize: '14px',
+                  }
+                });
+                $('body').append($notification);
+              } else {
+                // Update colours for existing notification
+                $notification.css('background', allFailed ? '#d9534f' : '#f0ad4e');
+                $notification.css('color', allFailed ? '#fff' : '#000');
+              }
+              
+              $notification.html(allFailed
+                ? `<strong>⚠ Background Screening Failed</strong><br>
+                   All ${summary.total_gtis} GTIs failed — showing unscreened data`
+                : `<strong>Background Screening Applied</strong><br>
+                   ${summary.passed_gtis}/${summary.total_gtis} GTIs passed<br>
+                   <small>Excluded: GTI ${summary.failed_gti_numbers.join(', ')}</small>`
+              ).fadeIn(300);
+              
+              // Auto-hide after 5 seconds (8 seconds if all failed so user reads it)
+              setTimeout(() => {
+                $notification.fadeOut(500);
+              }, allFailed ? 8000 : 5000);
+            }
+
+            // Flag failed GTIs in the observation info table
+            flagScreenedGTIs(currentObsID, summary.failed_gti_numbers);
+          }
+        }
 
         // Update slider if default binning is provided
         if (data.defaultBinning) {

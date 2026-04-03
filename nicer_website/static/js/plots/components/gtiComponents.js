@@ -29,7 +29,6 @@ export function GTISelection(maxGTI, obsID, plotType, defaultBinning = 1) {
   const $FORM = $('<form>', { class: 'fetch-gti' });
   let cleanPlotType = plotType.replace(`-${obsID}`, '');
 
-
   // Calculate slider max as 10x the default binning or 200, whichever is larger
   let sliderMax = Math.max(200, defaultBinning * 10);
 
@@ -41,8 +40,9 @@ export function GTISelection(maxGTI, obsID, plotType, defaultBinning = 1) {
 
   if (cleanPlotType === 'light_curve' || cleanPlotType === 'light-curve') {
     binningLabel = 'Time Binning';
-    binningUnit = 'time bins';
-    binningDescription = 'Combines time bins (higher = fewer points)';
+    binningUnit = 's';
+    binningDescription = 'Combines time bins (1 bin = 0.125s)';
+    displayMultiplier = 0.125;
   } else if (
     cleanPlotType === 'power_density_spectrum' ||
     cleanPlotType === 'power-density-spectrum'
@@ -53,15 +53,11 @@ export function GTISelection(maxGTI, obsID, plotType, defaultBinning = 1) {
   } else if (
     cleanPlotType === 'hardness_intensity_diagram' ||
     cleanPlotType === 'hardness-intensity-diagram' ||
-    cleanPlotType === 'time' // Handle legacy 'time' mapping
+    cleanPlotType === 'time'
   ) {
-    // note: don't change cleanPlotType to 'hardness-intensity-diagram' here if it is 'time'.
-    // The container ID is likely #time-{obsID}, so should keep 'time' as the plot_type
-
     if (cleanPlotType === 'hardness_intensity_diagram') {
       cleanPlotType = 'hardness-intensity-diagram';
     }
-
     binningLabel = 'Time Binning';
     binningUnit = 's';
     binningDescription = 'Combines time bins (1 bin = 0.125s)';
@@ -97,7 +93,6 @@ export function GTISelection(maxGTI, obsID, plotType, defaultBinning = 1) {
     placeholder: `GTI numbers (,) and/or range (-) between 0 and ${maxGTI - 1}`,
   });
 
-  // store the actual binning value sent to server
   const $HIDDEN_MIN_VALUE = $('<input>', {
     name: 'min_value',
     type: 'hidden',
@@ -106,7 +101,6 @@ export function GTISelection(maxGTI, obsID, plotType, defaultBinning = 1) {
 
   const $MIN_SLIDER = $(`<input>`, {
     id: `${cleanPlotType}-min-slider`,
-    // name: 'min_value',
     type: 'range',
     min: 1,
     max: sliderMax,
@@ -151,7 +145,7 @@ export function GTISelection(maxGTI, obsID, plotType, defaultBinning = 1) {
 
   const $SUBMIT = $('<button>', { type: 'submit', text: 'Submit' });
 
-  //  GTI cross-linking toggle for HID plots
+  // GTI cross-linking toggle for HID plots
   let $crossLinkToggle = null;
   if (
     cleanPlotType === 'hardness_intensity_diagram' ||
@@ -181,11 +175,11 @@ export function GTISelection(maxGTI, obsID, plotType, defaultBinning = 1) {
   // Adds elements to the form
   $FORM.append($TYPE);
   $FORM.append($OBS_ID);
-  $FORM.append($HIDDEN_MIN_VALUE); // Add hidden input
+  $FORM.append($HIDDEN_MIN_VALUE);
   $FORM.append(columnLayout([$SEARCH, $SUBMIT]));
-  $FORM.append(columnLayout([$MIN_SLIDER, $CONTROLS_CONTAINER])); // Use container instead of $MIN_VALUE
+  $FORM.append(columnLayout([$MIN_SLIDER, $CONTROLS_CONTAINER]));
 
-  //  cross-link toggle for HID
+  // Add cross-link toggle for HID
   if ($crossLinkToggle) {
     $FORM.append($crossLinkToggle);
   }
@@ -227,8 +221,6 @@ export function GTISelection(maxGTI, obsID, plotType, defaultBinning = 1) {
         currentBinningOperationId,
         'Updating ' + cleanPlotType.replace(/_/g, ' ') + ' plot...',
       );
-
-      
 
       // Use jQuery trigger which bubbles and hits jQuery handlers
       $FORM.trigger('submit');
@@ -377,7 +369,6 @@ export function GTISelection(maxGTI, obsID, plotType, defaultBinning = 1) {
         currentGtiOperationId,
         'Updating ' + cleanPlotType.replace(/_/g, ' ') + ' plot...',
       );
-
 
       // Check if the form has a submit handler attached
       const events = $._data($FORM[0], 'events');
