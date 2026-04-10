@@ -24,6 +24,7 @@ from src.apps.plots.light_curve_preprocessing import light_curve_plot
 from src.apps.plots.power_density_processing import get_pds_data_and_plot
 from src.apps.plots.summed_spectrum_preprocessing import summed_spectrum_plot
 from src.apps.plots.hardness_intensity_preprocessing import get_hid_data_and_plot
+from src.utils.background_screening import screen_gti_files, get_screening_summary
 
 
 # Log axis
@@ -381,8 +382,26 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
     plot_req: PlotRequest = PlotRequest.from_request(request)
     plot: PlotType = PLOTS[cast(list[str], plot_req.plot_types)[0]]
 
+    # Parse screening parameters with explicit logging
+    apply_screening_str = request.POST.get('apply_screening', 'false')
+    apply_screening = apply_screening_str.lower() == 'true'
+
     if not plot_req.min_value:
         plot_req.min_value = plot.min_value
+
+    if apply_screening:
+        try:
+            screening_energy_low = float(request.POST.get('screening_energy_low', 2.0))
+            screening_energy_high = float(request.POST.get('screening_energy_high', 5.0))
+            screening_min_bad_channels = int(request.POST.get('screening_min_bad_channels', 2))
+        except (ValueError, TypeError) as e:
+            screening_energy_low = 2.0
+            screening_energy_high = 5.0
+            screening_min_bad_channels = 2
+    else:
+        screening_energy_low = 2.0
+        screening_energy_high = 5.0
+        screening_min_bad_channels = 2
 
     LOGGER.info(f'Received POST data: {plot_req}')
 

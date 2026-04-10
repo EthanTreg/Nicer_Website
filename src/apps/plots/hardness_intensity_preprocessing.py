@@ -95,8 +95,8 @@ def process_lc_file(filename: str) -> Tuple[ndarray, ndarray, ndarray, ndarray]:
 def get_hid_data_and_plot(
     min_value: int,
     obs_id: int,
-    data_paths: List[str],
-    gti_numbers: List[int],
+    data_paths: list[str],
+    gti_numbers: list[int],
     gti_labels: list[str] | None) -> str:
     """
     Process multiple lightcurve files and create a Hardness-Intensity Diagram (HID) plot.
@@ -146,7 +146,7 @@ def get_hid_data_and_plot(
                     time_bin_width = detected_width
 
             if time_bin_width is None:
-                time_bin_width = 1.0 # / 8.0  #TODO: already being divided by 8 when getting time
+                time_bin_width = 1.0 # / 8.0  # TODO: already being divided by 8 when getting time
 
         mask: ndarray = (hardness > 0) & (intensity > 0) & ~np.isnan(hardness) & \
                         ~np.isnan(intensity)

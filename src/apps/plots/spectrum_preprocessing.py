@@ -162,7 +162,8 @@ def spectrum_plot(
         data_paths: list[str],
         gti_numbers: list[int],
         cut_off: list = None,
-        gti_labels: list[str] | None = None) -> str:
+        gti_labels: list[str] | None = None,
+        bg_dash: str = 'solid') -> str:
     """
     Gets and plots the binned and corrected spectra
 
@@ -180,6 +181,9 @@ def spectrum_plot(
         Range of accepted data in keV
     gti_labels : list[str] | None, default = None
         List of labels for each GTI, if None GTI numbers will be used as labels
+    bg_dash : str, default = 'solid'
+        Dash style for background line ('solid', 'dash', 'dot', etc.).
+        Set to 'dash' when background screening deems the model unreliable.
 
     Returns
     -------
@@ -214,7 +218,7 @@ def spectrum_plot(
         background_list=background,
         x_errors=x_error,
         y_uncertainties=y_uncertainties,
-        plot_kwargs={'mode': 'markers'},
+        plot_kwargs={'mode': 'markers', 'bg_dash': bg_dash},
         layout_kwargs={
             'title': f'Spectrum {obs_id}',
             'xaxis_title': r'$\text{Energy}\ (keV)$',

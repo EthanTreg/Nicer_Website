@@ -59,7 +59,13 @@ def light_curve_data(
     counts *= time_diff
 
     # Bin data
-    min_bins = min_bin(min_value, counts)
+    # Treat min_value as binning factor (combine N bins)
+    bin_factor = int(min_value) if min_value > 0 else 1
+    min_bins = np.arange(0, len(counts), bin_factor)
+    if min_bins[-1] != len(counts):
+        min_bins = np.append(min_bins, len(counts))
+    min_bins = np.unique(min_bins)
+
     (y_bin, bg_bin, x_bin), x_width, uncertainty = binning(
         min_bins,
         np.stack((counts[:len(background)], background[:len(time)], time[:len(background)])),
