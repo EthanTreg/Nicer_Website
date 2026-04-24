@@ -86,7 +86,7 @@ WSGI_APPLICATION = 'nicer_website.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'pdb',
+        'NAME': 'nicer',
         'HOST': 'localhost',
         'PORT': '5432',
     } | DB_USER

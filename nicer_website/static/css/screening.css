@@ -1,0 +1,79 @@
+/* Background Screening Toggle Styles */
+.screening-toggle {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.screening-toggle:hover {
+    background-color: #5a6268;
+}
+
+.screening-toggle.active {
+    background-color: #28a745;
+}
+
+.screening-toggle.active:hover {
+    background-color: #218838;
+}
+
+.screening-options {
+    font-size: 12px;
+}
+
+.screening-options label {
+    display: inline-block;
+    margin-right: 5px;
+}
+
+.screening-options input {
+    padding: 2px 5px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+/* Upper limit indicator styles */
+.upper-limit-marker {
+    cursor: help;
+}
+/* GTI row flagged as failed screening */
+.gti-row.screening-failed {
+    background-color: rgba(217, 83, 79, 0.15) !important;
+    position: relative;
+}
+
+.gti-row.screening-failed td:first-child::after {
+    content: '⚠';
+    margin-left: 6px;
+    font-size: 12px;
+    color: #d9534f;
+    cursor: help;
+}
+
+.gti-row.screening-failed .gti-checkbox {
+    opacity: 0.5;
+}
+
+/* Screening badge shown next to GTI name */
+.screening-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+    font-weight: 600;
+}
+
+.screening-badge.failed {
+    background-color: #d9534f;
+    color: #fff;
+}
+
+.screening-badge.passed {
+    background-color: #5cb85c;
+    color: #fff;
+}

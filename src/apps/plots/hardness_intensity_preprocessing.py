@@ -2,7 +2,10 @@
 Utilities to correct HID (Hardness-Intensity Diagram)
 """
 import os
-from typing import List, Tuple
+import re
+from typing import List, Tuple, Any
+import logging
+
 
 import numpy as np
 from numpy import ndarray
@@ -133,10 +136,36 @@ def get_hid_data_and_plot(
 
     time_bin_width = None
 
-    for gti_number in gti_numbers:
-        lc_path: str = data_paths[0].replace("GTI0", f"GTI{gti_number}")
-        time, soft_band, hard_band, intensity = process_lc_file(lc_path)
-        hardness = hard_band / soft_band
+    # Build robust GTI->path mapping from provided files when possible.
+    path_by_gti: dict[int, str] = {}
+    for p in data_paths:
+        match = re.search(r'GTI(\d+)', p)
+        if match:
+            path_by_gti[int(match.group(1))] = p
+
+    # Process each requested GTI using its corresponding path.
+    # Prefer explicit path mapping; otherwise fall back to zipped pairing when
+    # caller already passed aligned data_paths/gti_numbers.
+    for idx, gti_number in enumerate(gti_numbers):
+        lc_path: str | None = path_by_gti.get(gti_number)
+
+        if lc_path is None and len(data_paths) == len(gti_numbers):
+            lc_path = data_paths[idx]
+
+        if lc_path is None:
+            logger.warning(
+                f"[HID] No file path found for GTI {gti_number}; skipping this GTI"
+            )
+            continue
+
+        try:
+            # time, hardness, intensity = process_lc_file(lc_path)
+            time, soft_band, hard_band, intensity = process_lc_file(lc_path)
+            hardness = hard_band / soft_band
+        except Exception as e:
+            logger.warning(f"Could not process file {lc_path}: {e}")
+            continue
+
 
         if time_bin_width is None:
             if len(time) > 1:
