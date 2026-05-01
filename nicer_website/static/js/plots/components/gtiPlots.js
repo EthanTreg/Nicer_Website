@@ -866,10 +866,14 @@ function showGTIPlotSelectionPopup(obsID, selectedGTIs) {
           }
 
           if (response.plotDivs && response.plotDivs.length > 0) {
-            creatPlot(obsID, response.plotDivs[0])
-              if (response.screeningSummary) {
+            const plotID = creatPlot(obsID, response.plotDivs[0]);
+
+            // Show screening summary if available
+            if (response.screeningSummary) {
               const summary = response.screeningSummary;
+              const $plotContainer = $('#' + plotID);
               if (summary.all_failed) {
+                console.warn(`[Screening] ALL GTIs failed screening — showing unscreened data`);
                 let $note = $('<div>', {
                   class: 'screening-warning',
                   css: { padding: '8px 12px', background: '#d9534f', color: '#fff',
@@ -877,10 +881,13 @@ function showGTIPlotSelectionPopup(obsID, selectedGTIs) {
                   html: '<strong>⚠ Screening:</strong> All GTIs failed background screening. Showing unscreened data.',
                 });
                 $plotContainer.prepend($note);
+              } else if (summary.failed_gtis > 0) {
+                console.log(`[Screening] ${summary.failed_gtis} GTIs failed screening: ${summary.failed_gti_numbers.join(', ')}`);
               }
               // Flag failed GTIs in the observation info table
               flagScreenedGTIs(obsID, summary.failed_gti_numbers);
             }
+
             completeOperation(
                 operationId,
                 plotType.replace(/-/g, ' ') + ' plot generated successfully',

@@ -72,6 +72,10 @@ class PlotRequest:
     gti_query: str | list[str] = ''
     combined_obs_ids: list[int] | None = None
     plot_types: list[str] = None
+    apply_screening: bool = False
+    screening_energy_low: float = 2.0
+    screening_energy_high: float = 5.0
+    screening_min_bad_channels: int = 2
 
     def __repr__(self) -> str:
         return (f"PlotRequest({', '.join(
@@ -90,6 +94,10 @@ class PlotRequest:
             combined_obs_ids=[
                 int(obs) for obs in post.pop('combined_obs_ids', '').split(',')
             ] if 'combined_obs_ids' in post else None,
+            apply_screening=post.pop('apply_screening', 'false').lower() == 'true',
+            screening_energy_low=float(post.pop('screening_energy_low', 2.0)),
+            screening_energy_high=float(post.pop('screening_energy_high', 5.0)),
+            screening_min_bad_channels=int(post.pop('screening_min_bad_channels', 2)),
             plot_types=[],
         )
         for key in post:
@@ -169,35 +177,18 @@ def process_obs_id_search(plot_req: PlotRequest) -> JsonResponse | None:
 def process_plots(
         files: QuerySet[Item],
         plot_req: PlotRequest,
-        labels: list[str] | None = None) -> tuple[list[int], list[str]]:
-    """
-    Generates plots from the plot request.
-
-    Parameters
-    ----------
-    files : QuerySet[Item]
-        QuerySet of Item objects representing the files for the observation
-    plot_req : PlotRequest
-        Plot request containing the plot types to generate and other parameters
-    labels : list[str] | None, default = None
-        Optional list of labels for each GTI, if None, defaults to GTI number
-
-    Returns
-    -------
-    list[int]
-        List of maximum GTI numbers for each plot type
-    list[str]
-        List of plot divs as HTML strings for each plot type
-    """
+        labels: list[str] | None = None):
     ti: float
     plot_type: str
     max_gti: list[int] = []
     plot_divs: list[str] = []
+    default_binnings: dict[str, int] = {}
+    screening_summaries: dict = {}
     plot_files: QuerySet[Item]
     plot: PlotType
 
     if not plot_req.plot_types:
-        return [], []
+        return [], [], {}, {}
 
     for plot_type, plot in PLOTS.items():
         if not plot_type in plot_req.plot_types:
@@ -213,24 +204,61 @@ def process_plots(
             ti = time()
             plot_files = plot_files.order_by('gti')
             max_gti.append(files.last().gti)
+            
+            final_file_paths = [os.path.join(
+                settings.DATA_DIR,
+                str(file.obs_id),
+                'jspipe',
+                file.name,
+            ) for file in plot_files]
+            final_gti_numbers = list(plot_files.values_list('gti', flat=True))
+            
+            # calculate default binning
+            calculated_default = calculate_default_binning(final_file_paths[0], plot_type)
+            default_binnings[plot_type] = calculated_default
+            default_binnings[plot_type.replace('_', '-')] = calculated_default
+            if plot_type == 'hardness_intensity_diagram':
+                default_binnings['time'] = calculated_default
+                
+            use_min_value = plot_req.min_value if plot_req.min_value else calculated_default
+
+            bg_dash = 'solid'
+            if plot_req.apply_screening and plot_type in ['spectrum', 'summed_spectrum']:
+                passed_files, passed_gtis, results = screen_gti_files(
+                    final_file_paths,
+                    final_gti_numbers,
+                    energy_low=plot_req.screening_energy_low,
+                    energy_high=plot_req.screening_energy_high,
+                    min_bad_channels=plot_req.screening_min_bad_channels
+                )
+                summary = get_screening_summary(results)
+                screening_summaries[plot_type.replace('_', '-')] = summary
+                
+                if passed_files:
+                    final_file_paths = passed_files
+                    final_gti_numbers = passed_gtis
+                else:
+                    bg_dash = 'dash'
+                    summary['all_failed'] = True
+
+            kwargs = {}
+            if plot_type in ['spectrum', 'summed_spectrum']:
+                kwargs['bg_dash'] = bg_dash
+
             plot_div = plot.function(
-                plot.min_value,
+                use_min_value,
                 ' '.join(map(str, plot_req.combined_obs_ids)) if plot_req.combined_obs_ids else
                 plot_req.obs_id,
-                [os.path.join(
-                    settings.DATA_DIR,
-                    str(file.obs_id),
-                    'jspipe',
-                    file.name,
-                ) for file in plot_files],
-                list(plot_files.values_list('gti', flat=True)),
+                final_file_paths,
+                final_gti_numbers,
                 gti_labels=labels,
+                **kwargs
             )
             LOGGER.info(f'{plot_type} function completed in {time() - ti:.3f}s')
             plot_divs.append(plot_div)
         else:
             LOGGER.warning(f'No files found for plot type: {plot_type}')
-    return max_gti, plot_divs
+    return max_gti, plot_divs, default_binnings, screening_summaries
 
 
 def interactive_plot(request: HttpRequest) -> HttpResponse:
@@ -427,8 +455,9 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
     if plot_req.combined_obs_ids:
         labels = [f'GTI{file.gti} (Obs {file.obs_id})' for file in files]
 
-    plot_divs = process_plots(files, plot_req, labels=labels)[1]
-    return JsonResponse({'plotDivs': plot_divs})
+    max_gti, plot_divs, default_binnings, screening_summaries = process_plots(files, plot_req, labels=labels)
+    return JsonResponse({'plotDivs': plot_divs, 'screeningSummary': screening_summaries.get(plot_req.plot_types[0].replace('_', '-')) if screening_summaries else None})
+
 
 
 def plot_data(request: HttpRequest) -> JsonResponse:
@@ -473,6 +502,7 @@ def plot_data(request: HttpRequest) -> JsonResponse:
     LOGGER.info(f'Found {files.count()} files for obs_id {plot_req.obs_id}')
 
     if not files.exists():
+
         return JsonResponse({
             'error': f"No observable data found for {
                 f'observation ID: {plot_req.obs_id}' if plot_req.obs_search else
@@ -482,6 +512,7 @@ def plot_data(request: HttpRequest) -> JsonResponse:
 
     item = cast(Item, files.first())
     plot_req.source = plot_req.source or item.source
+
     obs_info = {
         'ra': item.ra,
         'dec': item.dec,
@@ -509,7 +540,8 @@ def plot_data(request: HttpRequest) -> JsonResponse:
         if not plot_req.source and 'OBJECT' in infos[-1]:
             plot_req.source = infos[-1]['OBJECT']
 
-    max_gti, plot_divs = process_plots(files, plot_req)
+    max_gti, plot_divs, default_binnings, screening_summaries = process_plots(files, plot_req)
+
 
     if not infos and not plot_divs:
         return JsonResponse({
@@ -529,6 +561,9 @@ def plot_data(request: HttpRequest) -> JsonResponse:
         'info': infos,
         'source': plot_req.source,
         'obs_info': obs_info,
+        'defaultBinnings': default_binnings,
+        'screeningSummaries': screening_summaries,
+
     })
 
 

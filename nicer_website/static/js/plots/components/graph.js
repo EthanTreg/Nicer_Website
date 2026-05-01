@@ -645,7 +645,9 @@ export function fetchGraphPlots(refresh = false, event) {
   }
 
   let serializedData = $(event.target).serialize();
+
   event.preventDefault();
+
   serializedData += `&csrfmiddlewaretoken=${$(
     "input[name='csrfmiddlewaretoken']",
   ).val()}`;

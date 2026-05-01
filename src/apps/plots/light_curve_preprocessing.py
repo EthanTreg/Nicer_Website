@@ -254,7 +254,18 @@ def light_curve_plot(
     x_error = [datum / 3600 / 24 for datum in x_error]
 
     for i, x_datum in enumerate(x_data[1:]):
-        if x_datum[0] - x_data[i][-1] > 10 * np.diff(x_datum).max():
+        # x_datum is x_data[i+1]
+        
+        # Robust bin width detection using x_error (half-width)
+        current_x_errors = x_error[i + 1]
+        if len(current_x_errors) > 0:
+            max_bin_width = 2 * np.max(current_x_errors)
+        else:
+            # Fallback if errors are empty (unlikely)
+            max_bin_width = 0
+
+        if max_bin_width > 0 and x_datum[0] - x_data[i][-1] > 10 * max_bin_width:
+
             subplot_kwargs.append({'row': 1, 'col': subplot_kwargs[-1]['col'] + 1})
         else:
             subplot_kwargs.append({'row': 1, 'col': subplot_kwargs[-1]['col']})
