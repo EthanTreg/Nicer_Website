@@ -204,7 +204,7 @@ def process_plots(
             ti = time()
             plot_files = plot_files.order_by('gti')
             max_gti.append(files.last().gti)
-            
+
             final_file_paths = [os.path.join(
                 settings.DATA_DIR,
                 str(file.obs_id),
@@ -212,14 +212,14 @@ def process_plots(
                 file.name,
             ) for file in plot_files]
             final_gti_numbers = list(plot_files.values_list('gti', flat=True))
-            
+
             # calculate default binning
             calculated_default = calculate_default_binning(final_file_paths[0], plot_type)
             default_binnings[plot_type] = calculated_default
             default_binnings[plot_type.replace('_', '-')] = calculated_default
             if plot_type == 'hardness_intensity_diagram':
                 default_binnings['time'] = calculated_default
-                
+
             use_min_value = plot_req.min_value if plot_req.min_value else calculated_default
 
             bg_dash = 'solid'
@@ -233,7 +233,7 @@ def process_plots(
                 )
                 summary = get_screening_summary(results)
                 screening_summaries[plot_type.replace('_', '-')] = summary
-                
+
                 if passed_files:
                     final_file_paths = passed_files
                     final_gti_numbers = passed_gtis
@@ -348,28 +348,23 @@ def calculate_default_binning(file_path, plot_type):
     elif plot_type == 'light_curve':
         #  have < 100 bins per GTI
         # ensure minimum counts per bin
-        with fits.open(file_path) as hdul:
-            if 'RATE' in hdul:
-                rate = hdul['RATE'].data['RATE']
-                total_bins = len(rate)
-                mean_rate = np.mean(rate)
+        rate = np.loadtxt(file_path, usecols=[2])
+        total_bins = len(rate)
+        mean_rate = np.mean(rate)
 
-                # Target 100 final bins per GTI
-                target_bins = 100
-                bins_to_combine = max(1, total_bins // target_bins)
+        # Target 100 final bins per GTI
+        target_bins = 100
+        bins_to_combine = max(1, total_bins // target_bins)
 
-                # at least 100 counts per bin
-                if mean_rate > 0:
-                    min_bins_for_100_counts = max(1, int(100 / mean_rate))
-                else:
-                    min_bins_for_100_counts = 1
+        # at least 100 counts per bin
+        if mean_rate > 0:
+            min_bins_for_100_counts = max(1, int(100 / mean_rate))
+        else:
+            min_bins_for_100_counts = 1
 
-                # Use one that combines more bins
-                default_bin = max(bins_to_combine, min_bins_for_100_counts)
-
-                final_points = total_bins / default_bin
-                final_counts_per_bin = mean_rate * default_bin
-                return default_bin
+        # Use one that combines more bins
+        default_bin = max(bins_to_combine, min_bins_for_100_counts)
+        return default_bin
 
     elif plot_type == 'power_density_spectrum':
         # For PDS: the min_value controls significance-based binning (higher number means more agressive binning)

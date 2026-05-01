@@ -33,6 +33,9 @@ DEBUG = True
 with open(os.path.join(BASE_DIR, 'db_user.json'), mode='r', encoding='utf8') as file:
     DB_USER = json.load(file)
 
+with open(os.path.join(BASE_DIR, 'config.json'), mode='r', encoding='utf8') as file:
+    CONFIG = json.load(file)
+
 ALLOWED_HOSTS = ['127.0.0.1', '0.0.0.0']
 
 
@@ -86,7 +89,7 @@ WSGI_APPLICATION = 'nicer_website.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'nicer',
+        'NAME': CONFIG['database_name'],
         'HOST': 'localhost',
         'PORT': '5432',
     } | DB_USER
@@ -127,13 +130,10 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
 
-with open('config.json', mode='r', encoding='utf8') as file:
-    DATA_DIR = json.load(file)['data_dir']
-
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'nicer_website/static'),
-    ('nicer_data', DATA_DIR),
+    ('nicer_data', CONFIG['data_dir']),
 ]
 
 # Default primary key field type

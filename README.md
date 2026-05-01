@@ -12,8 +12,11 @@ https://nicer-web.mit.edu/nicerview/
   * Create database: `CREATE DATABASE <db_name> OWNER <username>;`
   * Assign owner: `GRANT ALL PRIVILEGES ON DATABASE <db_name> TO <username>;`
 * Create `db_user.json` in project root directory with entries:
-  * `"USER": "<username>"`,
+  * `"USER": "<username>"`
   * `"PASSWORD": "<password>"`
+* Create `config.json` in project root directory with entries:
+  * `"data_dir": "<path_to_data>"`
+  * `"database_name": "<db_name>"`
 * Create new secret key:
 Create `.env` file under root directory
 Generate new secret key by running `generate_secret_key.py` and copying the output into the `.env` file

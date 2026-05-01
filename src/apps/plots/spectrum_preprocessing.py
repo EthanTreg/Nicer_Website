@@ -60,7 +60,7 @@ def spectrum_data(
     detectors: int
     energy: float
     response: str
-    bg_interp_indices: tuple[ndarray, ndarray]
+    bg_interp_indices: tuple[int, int]
     bins: ndarray
     x_bin: ndarray
     y_bin: ndarray
@@ -130,15 +130,15 @@ def spectrum_data(
     # Energy range cut-off
     cut_indices = np.argwhere((x_bin < cut_off[0]) | (x_bin > cut_off[1]))
     bg_interp_indices = (
-        np.argwhere(x_bin < cut_off[0]).flatten()[-1:] + 1 or np.array([0]),
-        np.argwhere(x_bin > cut_off[1]).flatten()[0:1] - 1 or np.array([-1]),
+        min_cut[-1] if (min_cut := np.where(x_bin < cut_off[0])[0]).size else 0,
+        max_cut[0] if (max_cut := np.where(x_bin > cut_off[1])[0]).size else -1,
     )
 
     # Interpolate background data to the edge of the first and last bin within the energy range
     bg_bin_cut = np.delete(bg_bin, cut_indices)
     bg_bin = np.insert(bg_bin_cut, [0, bg_bin_cut.size], [
-        np.interp(x_bin[bg_interp_indices[0]] - x_error[bg_interp_indices[0]], x_bin, bg_bin)[0],
-        np.interp(x_bin[bg_interp_indices[1]] + x_error[bg_interp_indices[1]], x_bin, bg_bin)[0],
+        np.interp(x_bin[bg_interp_indices[0]] - x_error[bg_interp_indices[0]], x_bin, bg_bin),
+        np.interp(x_bin[bg_interp_indices[1]] + x_error[bg_interp_indices[1]], x_bin, bg_bin),
     ])
 
     # Remove data outside the energy range
