@@ -14,3 +14,4 @@
 config.json
 db_user.json
 /exported_spectra/*
+.DS_Store
