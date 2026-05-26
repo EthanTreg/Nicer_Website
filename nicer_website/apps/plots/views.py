@@ -325,6 +325,11 @@ def calculate_default_binning(file_path, plot_type):
     int
         Calculated default binning value
     """
+    fallback = PLOTS[plot_type].min_value if plot_type in PLOTS else 1
+    if not file_path or not os.path.exists(file_path):
+        log.warning(f"Default binning fallback: missing file for {plot_type}: {file_path}")
+        return fallback
+
     if plot_type in ['spectrum', 'summed_spectrum']:
         # For spectrum: reduce number of energy bins
         with fits.open(file_path) as hdul:
@@ -346,19 +351,36 @@ def calculate_default_binning(file_path, plot_type):
                 return default_bin
 
     elif plot_type == 'light_curve':
-        #  have < 100 bins per GTI
-        # ensure minimum counts per bin
-        rate = np.loadtxt(file_path, usecols=[2])
-        total_bins = len(rate)
-        mean_rate = np.mean(rate)
+        # Aim for higher time resolution while still limiting point count
+        try:
+            time, rate = np.loadtxt(file_path, usecols=[0, 2], unpack=True)
+        except (OSError, ValueError) as exc:
+            log.warning(
+                f"Default binning fallback: invalid light curve file {file_path}: {exc}"
+            )
+            return fallback
 
-        # Target 100 final bins per GTI
-        target_bins = 100
+        time = np.atleast_1d(time)
+        rate = np.atleast_1d(rate)
+
+        if time.size < 2 or rate.size == 0:
+            return fallback
+
+        time_diff = np.median(np.diff(time))
+        if not np.isfinite(time_diff) or time_diff <= 0:
+            time_diff = (time[-1] - time[0]) / max(len(time) - 1, 1)
+
+        total_bins = len(rate)
+        mean_rate = float(np.mean(rate))
+
+        # Target ~1000 final bins per GTI for more visible structure
+        target_bins = 1000
         bins_to_combine = max(1, total_bins // target_bins)
 
         # at least 100 counts per bin
-        if mean_rate > 0:
-            min_bins_for_100_counts = max(1, int(100 / mean_rate))
+        counts_per_bin = mean_rate * time_diff
+        if counts_per_bin > 0:
+            min_bins_for_100_counts = max(1, int(100 / counts_per_bin))
         else:
             min_bins_for_100_counts = 1
 
@@ -376,7 +398,6 @@ def calculate_default_binning(file_path, plot_type):
         return 1
 
     # Fallback to predefined defaults
-    fallback = PLOTS.get(plot_type, {}).get('min_value', 1)
     return fallback
 
 

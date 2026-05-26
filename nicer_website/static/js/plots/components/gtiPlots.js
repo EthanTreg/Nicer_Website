@@ -345,6 +345,27 @@ async function handleMultiGTIHIDPlot(obsID, gtiList, $form, plotType) {
           `[DEBUG gtiPlots.js] Detached GTI form to preserve it during update`,
         );
 
+      // Set global time axis range across all GTIs
+      let xMin = Infinity;
+      let xMax = -Infinity;
+      combinedData.forEach((trace) => {
+        if (trace.x && trace.x.length > 0) {
+          const traceXMin = Math.min(...trace.x);
+          const traceXMax = Math.max(...trace.x);
+          xMin = Math.min(xMin, traceXMin);
+          xMax = Math.max(xMax, traceXMax);
+        }
+      });
+
+      // Apply global axis range if we found valid data
+      if (isFinite(xMin) && isFinite(xMax) && xMin < xMax) {
+        baseLayout.xaxis = baseLayout.xaxis || {};
+        baseLayout.xaxis.range = [xMin, xMax];
+        console.log(
+          `[DEBUG gtiPlots.js] Set global xaxis range: [${xMin}, ${xMax}]`
+        );
+      }
+
       // Update the plot with combined data
       Plotly.react(target[0], combinedData, baseLayout);
       console.log(`[DEBUG gtiPlots.js] Plotly.react called`);
