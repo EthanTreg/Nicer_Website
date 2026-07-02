@@ -7,6 +7,7 @@ import {
   initSynchronizedSelection,
 } from './syncSelection.js';
 import { initInteractiveLinking } from './interactiveLinking.js';
+import { addPlotRequest } from './urlState.js';
 import { creatPlot } from "./graph.js";
 import {
   startOperation,
@@ -344,27 +345,6 @@ async function handleMultiGTIHIDPlot(obsID, gtiList, $form, plotType) {
         console.log(
           `[DEBUG gtiPlots.js] Detached GTI form to preserve it during update`,
         );
-
-      // Set global time axis range across all GTIs
-      let xMin = Infinity;
-      let xMax = -Infinity;
-      combinedData.forEach((trace) => {
-        if (trace.x && trace.x.length > 0) {
-          const traceXMin = Math.min(...trace.x);
-          const traceXMax = Math.max(...trace.x);
-          xMin = Math.min(xMin, traceXMin);
-          xMax = Math.max(xMax, traceXMax);
-        }
-      });
-
-      // Apply global axis range if we found valid data
-      if (isFinite(xMin) && isFinite(xMax) && xMin < xMax) {
-        baseLayout.xaxis = baseLayout.xaxis || {};
-        baseLayout.xaxis.range = [xMin, xMax];
-        console.log(
-          `[DEBUG gtiPlots.js] Set global xaxis range: [${xMin}, ${xMax}]`
-        );
-      }
 
       // Update the plot with combined data
       Plotly.react(target[0], combinedData, baseLayout);
@@ -887,7 +867,9 @@ function showGTIPlotSelectionPopup(obsID, selectedGTIs) {
           }
 
           if (response.plotDivs && response.plotDivs.length > 0) {
-            const plotID = creatPlot(obsID, response.plotDivs[0]);
+            const plotID = creatPlot(obsID, response.plotDivs[0], {
+              defaultBinning: response.defaultBinning || 1,
+            });
 
             // Show screening summary if available
             if (response.screeningSummary) {
@@ -1149,6 +1131,8 @@ export function fetchGTIPlot(event) {
 
     console.log(`[DEBUG gtiPlots.js updatePlot] Sending AJAX request...`);
 
+    addPlotRequest('gti', formData);
+
     return $.ajax({
       type: 'POST',
       url: PLOT_GTI_URL,
@@ -1222,20 +1206,25 @@ export function fetchGTIPlot(event) {
         if (data.defaultBinning) {
           const $slider = $(`#${currentPlotType.replace('_', '-')}-min-slider`);
           const $sliderValue = $(
-            `#${currentPlotType.replace('_', '-')}-min-value`,
+            `#${currentPlotType.replace('_', '-')}-min-input`,
+          );
+          const $hiddenValue = $(
+            `form.fetch-gti input[name="min_value"]`,
           );
 
           if ($slider.length && (!$slider.val() || $slider.val() == 1)) {
             // Determine label based on plot type
             let binningLabel = 'Binning';
             let binningUnit = 'counts';
+            let displayMultiplier = 1;
 
             if (
               currentPlotType.includes('light_curve') ||
               currentPlotType.includes('light-curve')
             ) {
               binningLabel = 'Time Binning';
-              binningUnit = 'bins';
+              binningUnit = 's';
+              displayMultiplier = 0.125;
             } else if (
               currentPlotType.includes('power_density') ||
               currentPlotType.includes('power-density')
@@ -1253,12 +1242,15 @@ export function fetchGTIPlot(event) {
               binningUnit = 'counts';
             }
 
+            const displayValue = parseFloat(
+              (data.defaultBinning * displayMultiplier).toFixed(3),
+            );
+
             // Only update if slider is at default value of 1
             $slider.val(data.defaultBinning);
             $slider.attr('max', Math.max(200, data.defaultBinning * 10));
-            $sliderValue.text(
-              `${binningLabel}: ${data.defaultBinning} ${binningUnit}`,
-            );
+            $sliderValue.val(displayValue);
+            $hiddenValue.val(data.defaultBinning);
           }
         }
 
@@ -1271,7 +1263,9 @@ export function fetchGTIPlot(event) {
           console.log(`[DEBUG gtiPlots.js updatePlot] No plotDivs in response`);
         }
 
-        creatPlot(obsID, data.plotDivs[0])
+        creatPlot(obsID, data.plotDivs[0], {
+          defaultBinning: data.defaultBinning || 1,
+        })
 
         // Re-run MathJax for any math expressions (for both update and new plot scenarios)
         if (typeof MathJax !== 'undefined' && MathJax.typeset) {
@@ -1433,7 +1427,9 @@ export function combineAndPlotGTIs(event) {
         $(`#${TYPE}-${obsID}`).remove();
       })
 
-      const PLOT_ID = creatPlot(obsIDs.join('-'), data.plotDivs[0]);
+      const PLOT_ID = creatPlot(obsIDs.join('-'), data.plotDivs[0], {
+        defaultBinning: data.defaultBinning || 1,
+      });
       const $PLOT_SECTION = $(`#${PLOT_ID}`).closest('.plot-type-section');
       const $COMBINE_BUTTON = $PLOT_SECTION.find('form.combine-gtis').first()
           .find('button[type="submit"]');

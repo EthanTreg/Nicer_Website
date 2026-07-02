@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import plotly.graph_objs as go
 from numpy import ndarray
-from plotly.io import to_json
+
 from plotly.colors import qualitative
 
 
@@ -40,94 +40,6 @@ def clip_for_log_scale(data: ndarray, min_value: float = LOG_SCALE_MIN_VALUE) ->
     # Also clip very small positive values
     clipped = np.maximum(clipped, min_value)
     return clipped
-
-
-def compute_adaptive_log_y_range(
-        y_series: list[ndarray | None],
-        bg_series: list[ndarray | None] | None = None,
-        min_value: float = LOG_SCALE_MIN_VALUE,
-) -> list[float] | None:
-    """
-    Compute an adaptive log10 y-axis range.
-
-    Goal:
-    - Avoid letting a few near-zero / clipped points force the lower axis bound
-      to very small values (e.g. 1e-10) and compress the useful part.
-    - Preserve truly broad intrinsic dynamic range when the full distribution
-      supports it.
-
-    Strategy:
-    1. Gather all finite positive y/background values.
-    2. Compute raw dynamic range from min positive to max.
-    3. If raw dynamic range is extreme, test whether this is driven by a tiny
-       low-value tail using a robust lower percentile.
-    4. Use robust lower bound only when it substantially reduces range while
-       still capturing the bulk. Otherwise keep full range.
-    """
-    source_values: list[np.ndarray] = []
-    bg_values: list[np.ndarray] = []
-
-    for series in y_series:
-        if series is None:
-            continue
-        arr = np.asarray(series, dtype=float)
-        valid = arr[np.isfinite(arr) & (arr > 0)]
-        if valid.size:
-            source_values.append(valid)
-
-    if not source_values:
-        return None
-
-    if bg_series is not None:
-        for series in bg_series:
-            if series is None:
-                continue
-            arr = np.asarray(series, dtype=float)
-            valid = arr[np.isfinite(arr) & (arr > 0)]
-            if valid.size:
-                bg_values.append(valid)
-
-    src_all = np.concatenate(source_values)
-    if src_all.size == 0:
-        return None
-
-    max_source = float(np.max(src_all))
-    max_bg = float(np.max(np.concatenate(bg_values))) if bg_values else -np.inf
-    max_y = max(max_source, max_bg)
-
-    min_y = float(max(np.min(src_all), min_value))
-
-    if max_y <= 0 or min_y <= 0:
-        return None
-
-    raw_dynamic = max_source / min_y
-
-    # Default lower bound is the true minimum positive value.
-    lower = min_y
-
-    # Tail-trimming rule based on source distribution only:
-    # if the lowest tail extends far below the main body, trim to p5.
-    if src_all.size >= 20 and raw_dynamic > 1e3:
-        p5 = float(max(np.percentile(src_all, 5), min_value))
-        p95 = float(max(np.percentile(src_all, 95), min_value))
-
-        if p95 > p5 > 0:
-            core_decades = np.log10(p95 / p5)
-            raw_decades = np.log10(raw_dynamic)
-            # Large gap between raw and core range means a runaway lower tail.
-            if raw_decades - core_decades >= 1.5:
-                lower = p5
-
-    # Padding in log-space
-    log_min = np.log10(max(lower, min_value)) - 0.35
-    log_max = np.log10(max_y) + 0.25
-
-    # Guardrails
-    log_min = max(log_min, -10)
-    if log_max <= log_min:
-        log_max = log_min + 1.0
-
-    return [float(log_min), float(log_max)]
 
 
 def handle_log_scale_uncertainties(
@@ -521,19 +433,5 @@ def data_plot(
                 legendgroup=number,
             ), **subplot_kwargs or {})
 
-    # Set sensible y-axis range for log scale if not already specified
-    if is_log_scale:
-        yaxis_config = layout_kwargs.get('yaxis', {})
-        if 'range' not in yaxis_config:
-            adaptive_range = compute_adaptive_log_y_range(
-                y_series=data_lists[1],
-                bg_series=data_lists[5],
-                min_value=LOG_SCALE_MIN_VALUE,
-            )
-
-            if adaptive_range is not None:
-                yaxis_config['range'] = adaptive_range
-                layout_kwargs['yaxis'] = yaxis_config
-
     fig.update_layout(**layout_kwargs)
-    return to_json(fig)
+    return fig.to_dict()

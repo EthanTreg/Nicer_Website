@@ -85,9 +85,25 @@ class PlotRequest:
     @classmethod
     def from_request(cls, request: HttpRequest) -> 'PlotRequest':
         post: dict[str, str] = request.POST.dict()
+        search_type = post.pop('search_type', '')
+        obs_search_raw = post.pop('obs_search', '')
+        min_value_raw = post.pop('min_value', post.pop('binning', ''))
+        if obs_search_raw.lower() in {'true', 'false'}:
+            obs_search = obs_search_raw.lower() == 'true'
+        elif obs_search_raw in {'source', 'obs_id'}:
+            obs_search = obs_search_raw != 'source'
+        elif search_type:
+            obs_search = search_type != 'source'
+        else:
+            obs_search = True
+        try:
+            min_value = float(min_value_raw) if min_value_raw not in {'', None} else 0
+        except (TypeError, ValueError):
+            min_value = 0
         instance: PlotRequest = cls(
-            obs_search=post.pop('obs_search', 'true').lower() == 'true',
+            obs_search=obs_search,
             obs_id=int(post.pop('obs_id', 0) or 0),
+            min_value=min_value,
             source=post.pop('source', ''),
             quality=post.pop('quality', ''),
             gti_query=post.pop('gti-search', ''),
@@ -150,10 +166,10 @@ def process_obs_id_search(plot_req: PlotRequest) -> JsonResponse | None:
         obs_items = Item.objects.filter(
             source=plot_req.source,
             type=Item.dir,
-        ).distinct('path', 'source')
+        ).values('obs_id', 'source').distinct()
 
         for item in obs_items:
-            obs_ids.append({'obs_id': item.obs_id, 'source': item.source})
+            obs_ids.append({'obs_id': item['obs_id'], 'source': item['source']})
 
         if len(obs_ids) > 1:
             return JsonResponse({
@@ -203,7 +219,9 @@ def process_plots(
         if plot_files.exists():
             ti = time()
             plot_files = plot_files.order_by('gti')
-            max_gti.append(files.last().gti)
+            max_gti.append(
+                plot_files.exclude(gti__isnull=True).values('gti').distinct().count()
+            )
 
             final_file_paths = [os.path.join(
                 settings.DATA_DIR,
@@ -277,6 +295,7 @@ def interactive_plot(request: HttpRequest) -> HttpResponse:
     """
     return render(request, 'plots/plot.html', {
         'plot_divs': None,
+        # 'quality': 'gold',  # Default to gold quality
     })
 
 
@@ -325,11 +344,6 @@ def calculate_default_binning(file_path, plot_type):
     int
         Calculated default binning value
     """
-    fallback = PLOTS[plot_type].min_value if plot_type in PLOTS else 1
-    if not file_path or not os.path.exists(file_path):
-        log.warning(f"Default binning fallback: missing file for {plot_type}: {file_path}")
-        return fallback
-
     if plot_type in ['spectrum', 'summed_spectrum']:
         # For spectrum: reduce number of energy bins
         with fits.open(file_path) as hdul:
@@ -351,36 +365,19 @@ def calculate_default_binning(file_path, plot_type):
                 return default_bin
 
     elif plot_type == 'light_curve':
-        # Aim for higher time resolution while still limiting point count
-        try:
-            time, rate = np.loadtxt(file_path, usecols=[0, 2], unpack=True)
-        except (OSError, ValueError) as exc:
-            log.warning(
-                f"Default binning fallback: invalid light curve file {file_path}: {exc}"
-            )
-            return fallback
-
-        time = np.atleast_1d(time)
-        rate = np.atleast_1d(rate)
-
-        if time.size < 2 or rate.size == 0:
-            return fallback
-
-        time_diff = np.median(np.diff(time))
-        if not np.isfinite(time_diff) or time_diff <= 0:
-            time_diff = (time[-1] - time[0]) / max(len(time) - 1, 1)
-
+        #  have < 100 bins per GTI
+        # ensure minimum counts per bin
+        rate = np.loadtxt(file_path, usecols=[2])
         total_bins = len(rate)
-        mean_rate = float(np.mean(rate))
+        mean_rate = np.mean(rate)
 
-        # Target ~1000 final bins per GTI for more visible structure
-        target_bins = 1000
+        # Target 100 final bins per GTI
+        target_bins = 100
         bins_to_combine = max(1, total_bins // target_bins)
 
         # at least 100 counts per bin
-        counts_per_bin = mean_rate * time_diff
-        if counts_per_bin > 0:
-            min_bins_for_100_counts = max(1, int(100 / counts_per_bin))
+        if mean_rate > 0:
+            min_bins_for_100_counts = max(1, int(100 / mean_rate))
         else:
             min_bins_for_100_counts = 1
 
@@ -398,6 +395,7 @@ def calculate_default_binning(file_path, plot_type):
         return 1
 
     # Fallback to predefined defaults
+    fallback = PLOTS.get(plot_type, {}).get('min_value', 1)
     return fallback
 
 
@@ -472,7 +470,15 @@ def plot_gti(request: HttpRequest) -> JsonResponse:
         labels = [f'GTI{file.gti} (Obs {file.obs_id})' for file in files]
 
     max_gti, plot_divs, default_binnings, screening_summaries = process_plots(files, plot_req, labels=labels)
-    return JsonResponse({'plotDivs': plot_divs, 'screeningSummary': screening_summaries.get(plot_req.plot_types[0].replace('_', '-')) if screening_summaries else None})
+    first_plot_type = plot_req.plot_types[0]
+    default_binning = default_binnings.get(first_plot_type)
+    if default_binning is None:
+        default_binning = default_binnings.get(first_plot_type.replace('_', '-'))
+    return JsonResponse({
+        'plotDivs': plot_divs,
+        'screeningSummary': screening_summaries.get(first_plot_type.replace('_', '-')) if screening_summaries else None,
+        'defaultBinning': default_binning,
+    })
 
 
 
@@ -510,6 +516,23 @@ def plot_data(request: HttpRequest) -> JsonResponse:
     if result := process_obs_id_search(plot_req):
         return result
 
+    # If no quality specified, try to find the best available quality for this obs_id
+    if not plot_req.quality:
+        quality_preference = ['gold', 'silver', 'goddard', 'gleam']
+        available_qualities = Item.objects.filter(
+            obs_id=plot_req.obs_id,
+            type=Item.file,
+        ).values_list('quality', flat=True).distinct()
+        
+        for pref_quality in quality_preference:
+            if pref_quality in available_qualities:
+                plot_req.quality = pref_quality
+                break
+        
+        # If no preferred quality found, use the first available
+        if not plot_req.quality and available_qualities:
+            plot_req.quality = available_qualities[0]
+
     files = Item.objects.filter(
         obs_id=plot_req.obs_id,
         quality=plot_req.quality,
@@ -543,10 +566,15 @@ def plot_data(request: HttpRequest) -> JsonResponse:
     }
     data_dir = os.path.join(settings.DATA_DIR, str(plot_req.obs_id), 'jspipe')
 
+    seen_gtis: set[int] = set()
     for file in files.filter(
         file_type='summary',
         gti__isnull=False,
-    ).distinct('gti').order_by('gti'):
+    ).order_by('gti'):
+        if file.gti is None or file.gti in seen_gtis:
+            continue
+        seen_gtis.add(file.gti)
+
         infos.append(dict(zip(*np.char.replace(np.loadtxt(
             os.path.join(data_dir, file.name),
             dtype=str,

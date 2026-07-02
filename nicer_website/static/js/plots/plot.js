@@ -27,6 +27,69 @@ import {
 } from './components/gtiCrossLinking.js';
 
 document.addEventListener('DOMContentLoaded', () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const reqKeys = Array.from(urlParams.keys()).filter((key) => key.startsWith('req'));
+
+  if (reqKeys.length > 0) {
+    reqKeys.sort();
+
+    const decodeBase64Url = (value) => {
+      let normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+      while (normalized.length % 4) normalized += '=';
+      return atob(normalized);
+    };
+
+    (async () => {
+      for (let i = 0; i < reqKeys.length; i++) {
+        const reqStr = urlParams.get(reqKeys[i]);
+        if (!reqStr) continue;
+
+        const pipeIndex = reqStr.indexOf('|');
+        if (pipeIndex === -1) continue;
+
+        const reqType = reqStr.substring(0, pipeIndex);
+        let reqData = reqStr.substring(pipeIndex + 1);
+
+        if (reqData.startsWith('b64:')) {
+          try {
+            reqData = decodeBase64Url(reqData.substring(4));
+          } catch (error) {
+            console.error('Failed to decode stored request data', error);
+            continue;
+          }
+        }
+
+        const $mockForm = $('<form>');
+        const paramsData = new URLSearchParams(reqData);
+
+        for (const [key, value] of paramsData.entries()) {
+          $('<input>').attr({ type: 'hidden', name: key, value }).appendTo($mockForm);
+        }
+
+        $('<input>')
+          .attr({
+            type: 'hidden',
+            name: 'csrfmiddlewaretoken',
+            value: $("input[name='csrfmiddlewaretoken']").val(),
+          })
+          .appendTo($mockForm);
+
+        const mockEvent = {
+          preventDefault: () => {},
+          target: $mockForm[0],
+        };
+
+        if (reqType === 'graph') {
+          fetchGraphPlots(i === 0, mockEvent);
+        } else if (reqType === 'gti') {
+          fetchGTIPlot(mockEvent);
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+    })();
+  }
+
   // Initialize the status bar
   StatusBar.getInstance();
 

@@ -14,6 +14,11 @@ import {
   errorOperation,
 } from './statusBar.js';
 import { titleCase } from "../utils/utils.js";
+import {
+  addPlotRequest,
+  clearPlotRequests,
+  removePlotRequestByObsId,
+} from './urlState.js';
 
 /**
  *  CSS styles for the popup to the document head
@@ -288,6 +293,7 @@ export function showPlotSelectionPopup(obsID) {
       id: `${type.id}-checkbox`,
       name: type.id,
       value: 'on',
+      checked: true,
     });
 
     const $label = $('<label>', {
@@ -567,9 +573,13 @@ export function creatPlot(
     obsID,
     plotDiv,
     {maxGTI = 0,
+  defaultBinning = 1,
     prefix = '',
     suffix = ''} = {}) {
-  plotDiv = JSON.parse(plotDiv)
+  // Handle both JSON strings and objects (in case backend changes)
+  if (typeof plotDiv === 'string') {
+    plotDiv = JSON.parse(plotDiv);
+  }
   const PLOT_ID = (prefix + plotDiv.layout.title.text + suffix).toLowerCase()
       .replaceAll(' ', '-');
   const TYPE = PLOT_ID.replace(`-${obsID}`, '');
@@ -619,6 +629,7 @@ export function creatPlot(
         maxGTI,
         obsID,
         TYPE,
+        defaultBinning,
       );
       $PLOT_DIV.append($GTI_FORM);
     }
@@ -666,6 +677,7 @@ export function fetchGraphPlots(refresh = false, event) {
     success: function (response) {
       // Clear both obs-info and plots divs if refreshing
       if (refresh) {
+        clearPlotRequests();
         $('#add-obs').show();
         $('#plots').empty();
         $('#obs-info-table').empty();
@@ -785,8 +797,17 @@ export function fetchGraphPlots(refresh = false, event) {
         serializedData.includes('hardness-intensity-diagram=');
 
       if (hasPlotTypes && response.plotDivs && response.plotDivs.length > 0) {
+        addPlotRequest('graph', serializedData);
         response.plotDivs.forEach((plotDiv, i) => {
-          creatPlot(response.obsID, plotDiv, {maxGTI: response.maxGTI[i]});
+          const plotTitle = plotDiv.layout.title.text.toLowerCase();
+          const plotTitleWithoutObsId = plotTitle.endsWith(` ${response.obsID}`)
+            ? plotTitle.slice(0, -(` ${response.obsID}`.length))
+            : plotTitle;
+          const plotTypeKey = plotTitleWithoutObsId.replaceAll(' ', '_');
+          creatPlot(response.obsID, plotDiv, {
+            maxGTI: response.maxGTI[i],
+            defaultBinning: response.defaultBinnings?.[plotTypeKey] || 1,
+          });
         });
 
         // Typeset any math expressions
@@ -860,6 +881,7 @@ export function removePlots(response, removeButton) {
 
   // Remove the info section for this observation
   $(`[data-obs-id="${response.obsID}"]`).remove();
+  removePlotRequestByObsId(response.obsID);
 
   // Hide the table and add observation button
   if ($('#obs-info-table').find('tr').length <= 1) {

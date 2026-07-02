@@ -36,6 +36,10 @@ with open(os.path.join(BASE_DIR, 'db_user.json'), mode='r', encoding='utf8') as 
 with open(os.path.join(BASE_DIR, 'config.json'), mode='r', encoding='utf8') as file:
     CONFIG = json.load(file)
 
+_config_data_dir = CONFIG.get('data_dir', '../testset/')
+DATA_DIR = str((BASE_DIR / _config_data_dir).resolve()) \
+    if not os.path.isabs(_config_data_dir) else _config_data_dir
+
 ALLOWED_HOSTS = ['127.0.0.1', '0.0.0.0']
 
 
@@ -86,13 +90,12 @@ WSGI_APPLICATION = 'nicer_website.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
+# Using SQLite for development (easier setup than PostgreSQL)
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': CONFIG['database_name'],
-        'HOST': 'localhost',
-        'PORT': '5432',
-    } | DB_USER
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
 }
 
 

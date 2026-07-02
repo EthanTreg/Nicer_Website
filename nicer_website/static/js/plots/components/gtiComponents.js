@@ -90,7 +90,7 @@ export function GTISelection(maxGTI, obsID, plotType, defaultBinning = 1) {
   const $SEARCH = $('<input>', {
     name: 'gti-search',
     type: 'text',
-    placeholder: `GTI numbers (,) and/or range (-) between 0 and ${maxGTI}`,
+    placeholder: `GTI numbers (,) and/or range (-) between 0 and ${Math.max(0, maxGTI - 1)}`,
   });
 
   const $HIDDEN_MIN_VALUE = $('<input>', {
